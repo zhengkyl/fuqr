@@ -22,7 +22,7 @@ enum Mode {
 impl QRCode {
     fn push_bits(&mut self, data: usize, len: usize) {
         for i in (0..len).rev() {
-            self.data.push((data & (1 << i)) == 1);
+            self.data.push((data & (1 << i)) != 0);
         }
     }
 }
@@ -67,9 +67,11 @@ fn encode_numeric(qrcode: &mut QRCode, input: &str) {
     qrcode.push_bits(0b0001, 4);
 
     let input = input.as_bytes();
-    for i in (1..input.len()).step_by(3) {
-        let group = (input[i] - b'0') * 100 + (input[i + 1] - b'0') * 10 + (input[i + 2] - b'0');
-        qrcode.push_bits(group.into(), 10);
+    for i in 0..(input.len() / 3) {
+        let group = (input[i * 3] - b'0') as usize * 100
+            + (input[i * 3 + 1] - b'0') as usize * 10
+            + (input[i * 3 + 2] - b'0') as usize;
+        qrcode.push_bits(group, 10);
     }
 
     match input.len() % 3 {
@@ -78,7 +80,7 @@ fn encode_numeric(qrcode: &mut QRCode, input: &str) {
             qrcode.push_bits(group.into(), 4);
         }
         2 => {
-            let group = (input[input.len() - 1] - b'0') * 10 + (input[input.len() - 1] - b'0');
+            let group = (input[input.len() - 2] - b'0') * 10 + (input[input.len() - 1] - b'0');
             qrcode.push_bits(group.into(), 7);
         }
         _ => (),
@@ -89,4 +91,44 @@ fn encode_numeric(qrcode: &mut QRCode, input: &str) {
         input.len(),
         bits_char_count_indicator(qrcode.version, Mode::Numeric),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn get_data_vec(bits: &str) -> Vec<bool> {
+        let mut v = Vec::new();
+        for c in bits.chars() {
+            match c {
+                '0' => v.push(false),
+                '1' => v.push(true),
+                _ => (),
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn encode_numeric_works() {
+        let mut qrcode = QRCode {
+            data: Vec::new(),
+            mask: 0,
+            version: 1,
+            ecc: ECL::Low,
+        };
+
+        encode_numeric(&mut qrcode, "1");
+        assert_eq!(qrcode.data, get_data_vec("0001 0001 0000000001"));
+
+        qrcode.data = Vec::new();
+        encode_numeric(&mut qrcode, "99");
+        assert_eq!(qrcode.data, get_data_vec("0001 1100011 0000000010"));
+
+        qrcode.data = Vec::new();
+        encode_numeric(&mut qrcode, "123456");
+        assert_eq!(
+            qrcode.data,
+            get_data_vec("0001 0001111011 0111001000 0000000110")
+        );
+    }
 }
