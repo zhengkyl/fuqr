@@ -61,10 +61,13 @@ fn bits_char_count_indicator(version: u8, mode: Mode) -> usize {
     return base;
 }
 
-// input is ascii b/c numeric
+// input fits in u8 b/c numeric
 fn encode_numeric(qrcode: &mut QRCode, input: &str) {
-    // mode indicator
     qrcode.push_bits(0b0001, 4);
+    qrcode.push_bits(
+        input.len(),
+        bits_char_count_indicator(qrcode.version, Mode::Numeric),
+    );
 
     let input = input.as_bytes();
     for i in 0..(input.len() / 3) {
@@ -85,12 +88,6 @@ fn encode_numeric(qrcode: &mut QRCode, input: &str) {
         }
         _ => (),
     }
-
-    // char count indicator
-    qrcode.push_bits(
-        input.len(),
-        bits_char_count_indicator(qrcode.version, Mode::Numeric),
-    );
 }
 
 fn ascii_to_b45(c: u8) -> u8 {
@@ -111,6 +108,10 @@ fn ascii_to_b45(c: u8) -> u8 {
 }
 fn encode_alphanumeric(qrcode: &mut QRCode, input: &str) {
     qrcode.push_bits(0b0010, 4);
+    qrcode.push_bits(
+        input.len(),
+        bits_char_count_indicator(qrcode.version, Mode::Alphanumeric),
+    );
 
     let input = input.as_bytes();
 
@@ -123,11 +124,18 @@ fn encode_alphanumeric(qrcode: &mut QRCode, input: &str) {
     if (input.len() & 1) == 1 {
         qrcode.push_bits(ascii_to_b45(input[input.len() - 1]).into(), 6);
     }
+}
 
+// ISO-8859-1 aka first 256 unicode
+fn encode_byte(qrcode: &mut QRCode, input: &str) {
+    qrcode.push_bits(0b0100, 4);
     qrcode.push_bits(
         input.len(),
-        bits_char_count_indicator(qrcode.version, Mode::Alphanumeric),
+        bits_char_count_indicator(qrcode.version, Mode::Byte),
     );
+    for c in input.as_bytes() {
+        qrcode.push_bits((*c).into(), 8);
+    }
 }
 
 #[cfg(test)]
@@ -155,17 +163,17 @@ mod tests {
         };
 
         encode_numeric(&mut qrcode, "1");
-        assert_eq!(qrcode.data, get_data_vec("0001 0001 0000000001"));
+        assert_eq!(qrcode.data, get_data_vec("0001 0000000001 0001"));
 
         qrcode.data = Vec::new();
         encode_numeric(&mut qrcode, "99");
-        assert_eq!(qrcode.data, get_data_vec("0001 1100011 0000000010"));
+        assert_eq!(qrcode.data, get_data_vec("0001 0000000010 1100011"));
 
         qrcode.data = Vec::new();
         encode_numeric(&mut qrcode, "123456");
         assert_eq!(
             qrcode.data,
-            get_data_vec("0001 0001111011 0111001000 0000000110")
+            get_data_vec("0001 0000000110 0001111011 0111001000")
         );
     }
 
@@ -179,17 +187,30 @@ mod tests {
         };
 
         encode_alphanumeric(&mut qrcode, "1");
-        assert_eq!(qrcode.data, get_data_vec("0010 000001 000000001"));
+        assert_eq!(qrcode.data, get_data_vec("0010 000000001 000001"));
 
         qrcode.data = Vec::new();
         encode_alphanumeric(&mut qrcode, "99");
-        assert_eq!(qrcode.data, get_data_vec("0010 00110011110 000000010"));
+        assert_eq!(qrcode.data, get_data_vec("0010 000000010 00110011110"));
 
         qrcode.data = Vec::new();
         encode_alphanumeric(&mut qrcode, "ABC1::4");
         assert_eq!(
             qrcode.data,
-            get_data_vec("0010 00111001101 01000011101 11111101000 000100 000000111")
+            get_data_vec("0010 000000111 00111001101 01000011101 11111101000 000100")
         );
+    }
+
+    #[test]
+    fn encode_byte_works() {
+        let mut qrcode = QRCode {
+            data: Vec::new(),
+            mask: 0,
+            version: 1,
+            ecc: ECL::Low,
+        };
+
+        encode_byte(&mut qrcode, "0");
+        assert_eq!(qrcode.data, get_data_vec("0100 00000001 00110000"));
     }
 }
