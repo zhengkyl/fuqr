@@ -1,8 +1,8 @@
 enum ECL {
-    Low,
-    Medium,
-    Quartile,
-    High,
+    Low,      // 7
+    Medium,   // 15
+    Quartile, // 25
+    High,     // 30
 }
 
 #[derive(PartialEq, Eq)]
@@ -15,8 +15,10 @@ enum Mode {
     // ECI,
     // StructuredAppend,
     // FNC1,
-    // Terminator
+    // Terminator 0000, but optional and can be truncated
 }
+
+// pad codewords 11101100 00010001
 
 // this is fine for now
 impl QRCode {
@@ -25,12 +27,15 @@ impl QRCode {
             self.data.push((data & (1 << i)) != 0);
         }
     }
+    fn dims(self) -> u8 {
+        self.version * 4 + 17
+    }
 }
 struct QRCode {
     data: Vec<bool>,
-    mask: u8,
-    version: u8,
     ecc: ECL,
+    mask: u8,    // 1  - 8
+    version: u8, // 1 - 40
 }
 
 // size = 4 * version + 17
@@ -39,6 +44,8 @@ struct Segment {
     mode: Mode,
     data: Vec<bool>,
 }
+
+fn encode_data(data: &str) {}
 
 fn bits_char_count_indicator(version: u8, mode: Mode) -> usize {
     if mode == Mode::Byte {

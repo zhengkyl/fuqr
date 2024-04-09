@@ -2,6 +2,25 @@
 
 a big fu to qr codes
 
+## evidence board
+
+- eci (needs investigation)
+
+- mirror and invert should be handled by frontend
+
+- ~~structured append~~
+
+  - not enough decoder supported (eg google lens)
+
+- e + 2t <= d - p
+
+  - _e_ erasure
+  - _t_ error
+  - _d_ correction codewords
+  - _p_ misdecode protection codewords
+
+- avoid 1011101 (finder pattern) as much as possible
+
 ## references
 
 https://github.com/erwanvivien/fast_qr
