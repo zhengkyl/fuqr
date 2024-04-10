@@ -1,8 +1,10 @@
-enum ECL {
-    Low,      // 7
-    Medium,   // 15
-    Quartile, // 25
-    High,     // 30
+// values used while encoding format
+#[derive(Clone, Copy)]
+pub enum ECL {
+    Low = 1,      // 7
+    Medium = 0,   // 15
+    Quartile = 3, // 25
+    High = 2,     // 30
 }
 
 #[derive(PartialEq, Eq)]
@@ -31,11 +33,11 @@ impl QRCode {
         self.version * 4 + 17
     }
 }
-struct QRCode {
-    data: Vec<bool>,
-    ecc: ECL,
-    mask: u8,    // 1  - 8
-    version: u8, // 1 - 40
+pub struct QRCode {
+    pub data: Vec<bool>,
+    pub ecc: ECL,
+    pub mask: u8,    // 1  - 8
+    pub version: u8, // 1 - 40
 }
 
 // size = 4 * version + 17
