@@ -21,6 +21,10 @@ a big fu to qr codes
 
 - avoid 1011101 (finder pattern) as much as possible
 
+- version (< 7) based on dist between finder patterns (reference algo)
+
+-
+
 ## references
 
 https://github.com/erwanvivien/fast_qr

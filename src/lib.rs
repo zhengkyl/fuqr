@@ -1,5 +1,5 @@
-mod qr;
-mod version;
+pub mod qr;
+pub mod version;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right
