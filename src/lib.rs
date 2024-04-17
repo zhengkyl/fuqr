@@ -1,3 +1,4 @@
+pub mod ecc;
 pub mod math;
 pub mod qr;
 pub mod version;

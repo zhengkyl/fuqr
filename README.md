@@ -23,12 +23,6 @@ a big fu to qr codes
 
 - version (< 7) based on dist between finder patterns (reference algo)
 
-- divide blocks so that composed of blocks matching generator polynomial degrees
-
-  - can't be 3 blocks (idk why, 5 works)
-  - block sizes are consecutive if dividing odd numbers
-  - number of error codewords is same for each block
-
 - why does Annex A contain generator polynomials for up to 68 error correction codewords?
   - 30 is the max possible, b/c 15 correctable errors per block
 
