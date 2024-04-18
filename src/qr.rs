@@ -1,5 +1,7 @@
+use crate::version::Version;
+
 // values used while encoding format
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum ECL {
     Low = 1,      // 7
     Medium = 0,   // 15
@@ -30,14 +32,14 @@ impl QRCode {
         }
     }
     fn dims(self) -> u8 {
-        self.version * 4 + 17
+        self.version.0 * 4 + 17
     }
 }
 pub struct QRCode {
     pub data: Vec<bool>,
     pub ecc: ECL,
-    pub mask: u8,    // 1  - 8
-    pub version: u8, // 1 - 40
+    pub mask: u8,         // 1  - 8
+    pub version: Version, // 1 - 40
 }
 
 // size = 4 * version + 17
@@ -75,7 +77,7 @@ fn encode_numeric(qrcode: &mut QRCode, input: &str) {
     qrcode.push_bits(0b0001, 4);
     qrcode.push_bits(
         input.len(),
-        bits_char_count_indicator(qrcode.version, Mode::Numeric),
+        bits_char_count_indicator(qrcode.version.0, Mode::Numeric),
     );
 
     let input = input.as_bytes();
@@ -119,7 +121,7 @@ fn encode_alphanumeric(qrcode: &mut QRCode, input: &str) {
     qrcode.push_bits(0b0010, 4);
     qrcode.push_bits(
         input.len(),
-        bits_char_count_indicator(qrcode.version, Mode::Alphanumeric),
+        bits_char_count_indicator(qrcode.version.0, Mode::Alphanumeric),
     );
 
     let input = input.as_bytes();
@@ -140,7 +142,7 @@ fn encode_byte(qrcode: &mut QRCode, input: &str) {
     qrcode.push_bits(0b0100, 4);
     qrcode.push_bits(
         input.len(),
-        bits_char_count_indicator(qrcode.version, Mode::Byte),
+        bits_char_count_indicator(qrcode.version.0, Mode::Byte),
     );
     for c in input.as_bytes() {
         qrcode.push_bits((*c).into(), 8);
@@ -167,7 +169,7 @@ mod tests {
         let mut qrcode = QRCode {
             data: Vec::new(),
             mask: 0,
-            version: 1,
+            version: Version(1),
             ecc: ECL::Low,
         };
 
@@ -191,7 +193,7 @@ mod tests {
         let mut qrcode = QRCode {
             data: Vec::new(),
             mask: 0,
-            version: 1,
+            version: Version(1),
             ecc: ECL::Low,
         };
 
@@ -215,7 +217,7 @@ mod tests {
         let mut qrcode = QRCode {
             data: Vec::new(),
             mask: 0,
-            version: 1,
+            version: Version(1),
             ecc: ECL::Low,
         };
 

@@ -1,6 +1,7 @@
 use crate::qr::{QRCode, ECL};
 
-pub struct Version(u8);
+#[derive(Clone, Copy)]
+pub struct Version(pub u8);
 
 impl Version {
     // todo, debating where to put bound check
@@ -84,7 +85,7 @@ mod tests {
     fn format_information_works() {
         let mut qrcode = QRCode {
             data: Vec::new(),
-            version: 1,
+            version: Version(1),
             ecc: ECL::Medium,
             mask: 0,
         };
