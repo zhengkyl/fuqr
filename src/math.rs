@@ -31,5 +31,6 @@ const fn generate_antilog_table() -> [u8; 256] {
     array
 }
 
+// note: a 256 * 256 mult table is a possible alternative
 pub const LOG_TABLE: [u8; 256] = generate_log_table();
 pub const ANTILOG_TABLE: [u8; 256] = generate_antilog_table();

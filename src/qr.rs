@@ -22,16 +22,35 @@ enum Mode {
     // Terminator 0000, but optional and can be truncated
 }
 
-// pad codewords 11101100 00010001
-
-// this is fine for now
 impl QRCode {
-    fn push_bits(&mut self, data: usize, len: usize) {
+    // temp
+    pub fn push_bits(&mut self, data: usize, len: usize) {
         for i in (0..len).rev() {
             self.data.push((data & (1 << i)) != 0);
         }
     }
-    fn dims(self) -> u8 {
+
+    // temp
+    pub fn get_u8_data(&self) -> Vec<u8> {
+        assert!(self.data.len() % 8 == 0);
+
+        let mut vec = Vec::new();
+
+        for i in (0..self.data.len()).step_by(8) {
+            let mut num = 0;
+            for j in 0..8 {
+                if self.data[i + j] {
+                    num += 1 << (7 - j);
+                }
+            }
+
+            vec.push(num);
+        }
+
+        vec
+    }
+
+    pub fn dims(self) -> u8 {
         self.version.0 * 4 + 17
     }
 }
@@ -48,8 +67,6 @@ struct Segment {
     mode: Mode,
     data: Vec<bool>,
 }
-
-fn encode_data(data: &str) {}
 
 fn bits_char_count_indicator(version: u8, mode: Mode) -> usize {
     if mode == Mode::Byte {
@@ -73,7 +90,7 @@ fn bits_char_count_indicator(version: u8, mode: Mode) -> usize {
 }
 
 // input fits in u8 b/c numeric
-fn encode_numeric(qrcode: &mut QRCode, input: &str) {
+pub fn encode_numeric(qrcode: &mut QRCode, input: &str) {
     qrcode.push_bits(0b0001, 4);
     qrcode.push_bits(
         input.len(),
@@ -117,7 +134,7 @@ fn ascii_to_b45(c: u8) -> u8 {
         _ => unreachable!("Not b45 encodable"),
     }
 }
-fn encode_alphanumeric(qrcode: &mut QRCode, input: &str) {
+pub fn encode_alphanumeric(qrcode: &mut QRCode, input: &str) {
     qrcode.push_bits(0b0010, 4);
     qrcode.push_bits(
         input.len(),
@@ -138,7 +155,7 @@ fn encode_alphanumeric(qrcode: &mut QRCode, input: &str) {
 }
 
 // ISO-8859-1 aka first 256 unicode
-fn encode_byte(qrcode: &mut QRCode, input: &str) {
+pub fn encode_byte(qrcode: &mut QRCode, input: &str) {
     qrcode.push_bits(0b0100, 4);
     qrcode.push_bits(
         input.len(),

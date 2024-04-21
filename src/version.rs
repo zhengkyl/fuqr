@@ -28,8 +28,8 @@ impl Version {
         version | dividend
     }
 
-    pub fn num_codewords(self) -> u32 {
-        let width = 4 * (self.0 as u32) + 17;
+    pub fn num_data_modules(self) -> usize {
+        let width = 4 * (self.0 as usize) + 17;
 
         let mut modules = width * width;
 
@@ -54,7 +54,11 @@ impl Version {
             modules -= 36; // 2 version
         }
 
-        modules / 8
+        modules
+    }
+
+    pub fn num_codewords(self) -> usize {
+        self.num_data_modules() / 8
     }
 }
 
