@@ -81,13 +81,13 @@ pub fn get_error_codewords(qrcode: &QRCode) {
     for i in 0..group_1_size {
         dbg!(remainder(
             &data_slice[(i * 8)..(i + data_per_block)],
-            &GEN_7,
+            &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
         ));
     }
     for i in 0..group_2_size {
         dbg!(remainder(
             &data_slice[(i * 8)..(i + data_per_block + 1)],
-            &GEN_7,
+            &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
         ));
     }
 }
@@ -106,7 +106,7 @@ fn remainder(data: &[u8], generator: &[u8]) -> Vec<u8> {
         let alpha_diff = ANTILOG_TABLE[data[i] as usize];
 
         for j in 1..generator.len() {
-            base[i + j] ^= LOG_TABLE[generator[j].wrapping_add(alpha_diff) as usize];
+            base[i + j] ^= LOG_TABLE[(generator[j] as usize + alpha_diff as usize) % 255];
         }
     }
 
@@ -116,31 +116,26 @@ fn remainder(data: &[u8], generator: &[u8]) -> Vec<u8> {
     base[data.len()..(data.len() + num_codewords)].to_vec()
 }
 
-// const fn make_generator_polynomials() {
-//     let mut base  = [0; 31];
-//     base[0] = 1;
-//     base[1] = 1;
+const GEN_POLYNOMIALS: [[u8; 31]; 31] = make_polynomials();
 
-//     for i in 1..=30 {
-//         let mult =
-//     }
-// }
+pub const fn make_polynomials() -> [[u8; 31]; 31] {
+    let mut table = [[0; 31]; 31];
 
-// temp
-pub const GEN_7: [u8; 8] = [0, 87, 229, 146, 149, 238, 102, 21];
+    let mut i = 2;
+    while i <= 30 {
+        let mut j = i - 1;
 
-// for ref, replace with generator fn
-// const GEN_10: [u8; 11] = [0, 251, 67, 46, 61, 118, 70, 64, 94, 32, 45];
+        table[i][j + 1] = ((table[i - 1][j] as usize + i - 1) % 255) as u8;
 
-// const GEN_13: [u8; 14] = [
-//     0, 74, 152, 176, 100, 86, 100, 106, 104, 130, 218, 206, 140, 78,
-// ];
-// const GEN_16: [i32; 17] = [
-//     0, 120, 104, 107, 109, 102, 161, 76, 3, 91, 191, 147, 169, 182, 194, 225, 120,
-// ];
-// const GEN_17: [i32; 18] = [
-//     0, 43, 139, 206, 78, 43, 239, 123, 206, 214, 147, 24, 99, 150, 39, 243, 163, 136,
-// ];
-// const GEN_15: [i32; 16] = [
-//     0, 8, 183, 61, 91, 202, 37, 51, 58, 58, 237, 140, 124, 5, 99, 105,
-// ];
+        while j > 0 {
+            let exp = ((table[i - 1][j - 1] as usize + i - 1) % 255) as u8;
+
+            let coeff = LOG_TABLE[exp as usize] ^ LOG_TABLE[table[i - 1][j] as usize];
+            table[i][j] = ANTILOG_TABLE[coeff as usize];
+            j -= 1;
+        }
+
+        i += 1;
+    }
+    table
+}

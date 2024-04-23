@@ -1,13 +1,14 @@
 use fuqr::{
-    ecc::num_blocks,
+    ecc::{make_polynomials, num_blocks},
     encode,
-    math::ANTILOG_TABLE,
+    math::{ANTILOG_TABLE, LOG_TABLE},
     qr::{QRCode, ECL},
     version::Version,
 };
 
 // 6 correct
 fn main() {
+    // dbg!(make_polynomials());
     encode("");
     // let mut qrcode = QRCode {
     //     data: Vec::new(),

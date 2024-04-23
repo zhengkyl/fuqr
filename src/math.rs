@@ -1,9 +1,10 @@
-const fn generate_log_table() -> [u8; 256] {
-    let mut array = [0; 256];
+// 0 to 254
+const fn generate_log_table() -> [u8; 255] {
+    let mut array = [0; 255];
     array[0] = 1;
     // const for tracked here https://github.com/rust-lang/rust/issues/87575
     let mut i = 1;
-    while i < 256 {
+    while i < 255 {
         array[i] = array[i - 1] << 1;
         if array[i - 1] & 0b1000_0000 != 0 {
             // 2^4 + 2^3 + 2^2 + 2^0
@@ -13,7 +14,7 @@ const fn generate_log_table() -> [u8; 256] {
     }
     array
 }
-
+// 1 to 255 todo, should this include 255?
 const fn generate_antilog_table() -> [u8; 256] {
     let mut array = [0; 256];
     let mut i = 1;
@@ -32,5 +33,5 @@ const fn generate_antilog_table() -> [u8; 256] {
 }
 
 // note: a 256 * 256 mult table is a possible alternative
-pub const LOG_TABLE: [u8; 256] = generate_log_table();
+pub const LOG_TABLE: [u8; 255] = generate_log_table();
 pub const ANTILOG_TABLE: [u8; 256] = generate_antilog_table();
