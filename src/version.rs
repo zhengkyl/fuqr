@@ -8,9 +8,6 @@ impl Version {
     pub fn new(version: u8) -> Self {
         Version(version)
     }
-    // fn new(version: u8) -> Option<Self> {
-    //   Version(version)
-    // }
 
     // See Annex D for explaination
     // TLDR (18,6) Golay Code, take version, append remainder after polynomial division
@@ -55,10 +52,6 @@ impl Version {
         }
 
         modules
-    }
-
-    pub fn num_codewords(self) -> usize {
-        self.num_data_modules() / 8
     }
 }
 

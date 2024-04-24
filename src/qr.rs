@@ -14,8 +14,8 @@ enum Mode {
     Numeric,
     Alphanumeric,
     Byte,
-    Kanji,
     // TODO
+    // Kanji,
     // ECI,
     // StructuredAppend,
     // FNC1,
@@ -61,13 +61,6 @@ pub struct QRCode {
     pub version: Version, // 1 - 40
 }
 
-// size = 4 * version + 17
-
-struct Segment {
-    mode: Mode,
-    data: Vec<bool>,
-}
-
 fn bits_char_count_indicator(version: u8, mode: Mode) -> usize {
     if mode == Mode::Byte {
         return if version < 10 { 8 } else { 16 };
@@ -77,7 +70,7 @@ fn bits_char_count_indicator(version: u8, mode: Mode) -> usize {
     let mut base = match mode {
         Mode::Numeric => 10,
         Mode::Alphanumeric => 9,
-        Mode::Kanji => 8,
+        // Mode::Kanji => 8,
         _ => unreachable!("Unknown mode"),
     };
     if version > 9 {
