@@ -1,4 +1,4 @@
-use crate::qr::{QRCode, ECL};
+use crate::qr::QRCode;
 
 #[derive(Clone, Copy)]
 pub struct Version(pub u8);
@@ -56,7 +56,7 @@ impl Version {
 }
 
 fn format_information(qrcode: &QRCode) -> u32 {
-    let format = ((((qrcode.ecc as u8) << 3) | qrcode.mask) as u32) << 10;
+    let format = ((((qrcode.ecl as u8) << 3) | qrcode.mask) as u32) << 10;
     let mut dividend = format;
 
     while dividend >= 0b100_0000_0000 {
@@ -70,6 +70,8 @@ fn format_information(qrcode: &QRCode) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use crate::error_correction::ECL;
+
     use super::*;
     #[test]
     fn information_works() {
@@ -83,13 +85,13 @@ mod tests {
         let mut qrcode = QRCode {
             data: Vec::new(),
             version: Version(1),
-            ecc: ECL::Medium,
+            ecl: ECL::Medium,
             mask: 0,
         };
 
         assert_eq!(format_information(&qrcode), 0x5412);
 
-        qrcode.ecc = ECL::High;
+        qrcode.ecl = ECL::High;
         assert_eq!(format_information(&qrcode), 0x1689);
 
         qrcode.mask = 7;

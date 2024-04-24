@@ -1,13 +1,4 @@
-use crate::version::Version;
-
-// values used while encoding format
-#[derive(Clone, Copy, PartialEq)]
-pub enum ECL {
-    Low = 1,      // 7
-    Medium = 0,   // 15
-    Quartile = 3, // 25
-    High = 2,     // 30
-}
+use crate::{error_correction::ECL, version::Version};
 
 #[derive(PartialEq, Eq)]
 enum Mode {
@@ -56,7 +47,7 @@ impl QRCode {
 }
 pub struct QRCode {
     pub data: Vec<bool>,
-    pub ecc: ECL,
+    pub ecl: ECL,
     pub mask: u8,         // 1  - 8
     pub version: Version, // 1 - 40
 }
@@ -180,7 +171,7 @@ mod tests {
             data: Vec::new(),
             mask: 0,
             version: Version(1),
-            ecc: ECL::Low,
+            ecl: ECL::Low,
         };
 
         encode_numeric(&mut qrcode, "1");
@@ -204,7 +195,7 @@ mod tests {
             data: Vec::new(),
             mask: 0,
             version: Version(1),
-            ecc: ECL::Low,
+            ecl: ECL::Low,
         };
 
         encode_alphanumeric(&mut qrcode, "1");
@@ -228,7 +219,7 @@ mod tests {
             data: Vec::new(),
             mask: 0,
             version: Version(1),
-            ecc: ECL::Low,
+            ecl: ECL::Low,
         };
 
         encode_byte(&mut qrcode, "0");

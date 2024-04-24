@@ -1,9 +1,17 @@
-use crate::{
-    math::{ANTILOG_TABLE, LOG_TABLE},
-    qr::{QRCode, ECL},
-};
+use crate::math::{ANTILOG_TABLE, LOG_TABLE};
 
-const fn make_ecc_table() -> [[u16; 41]; 4] {
+// values used while encoding format
+#[derive(Clone, Copy, PartialEq)]
+pub enum ECL {
+    Low = 1,      // 7
+    Medium = 0,   // 15
+    Quartile = 3, // 25
+    High = 2,     // 30
+}
+
+pub const NUM_CODEWORDS: [[u16; 41]; 4] = num_codewords();
+
+const fn num_codewords() -> [[u16; 41]; 4] {
     let mut table = [[0; 41]; 4];
     table[ECL::Low as usize] = [
         0, 7, 10, 15, 20, 26, 36, 40, 48, 60, 72, 80, 96, 104, 120, 132, 144, 168, 180, 196, 224,
@@ -27,44 +35,61 @@ const fn make_ecc_table() -> [[u16; 41]; 4] {
     ];
     table
 }
-pub const ECC_TABLE: [[u16; 41]; 4] = make_ecc_table();
 
-// todo, turn into const or static table
-pub fn num_blocks(qrcode: &QRCode) -> u32 {
-    if qrcode.ecc == ECL::Medium {
-        match qrcode.version.0 {
-            15 => return 10,
-            19 => return 14,
-            38 => return 45,
-            _ => (),
-        }
-    }
+pub const NUM_BLOCKS: [[u8; 41]; 4] = num_blocks();
 
-    let codewords = ECC_TABLE[qrcode.ecc as usize][qrcode.version.0 as usize] as u32;
+pub const fn num_blocks() -> [[u8; 41]; 4] {
+    let mut table = [[0; 41]; 4];
 
-    let errors = codewords / 2;
-    if errors <= 15 {
-        return 1;
-    }
-    for i in (8..=15).rev() {
-        if errors % i == 0 {
-            let res = errors / i;
-            if res == 3 {
-                return 4;
+    let mut ecl = 0;
+    while ecl < NUM_CODEWORDS.len() {
+        let mut version = 1;
+
+        while version <= 40 {
+            let codewords = NUM_CODEWORDS[ecl][version];
+
+            let correctable = codewords / 2;
+            if correctable <= 15 {
+                table[ecl][version] = 1;
+                version += 1;
+                continue;
             }
-            return res;
+
+            let mut per_block = 15;
+
+            while per_block >= 8 {
+                if correctable % per_block == 0 {
+                    let mut blocks = correctable / per_block;
+                    if blocks == 3 {
+                        // Edgecase: there are never 3 blocks
+                        blocks += 1;
+                    }
+                    table[ecl][version] = blocks as u8;
+                    break;
+                }
+                per_block -= 1;
+            }
+
+            version += 1;
         }
+
+        ecl += 1;
     }
 
-    unreachable!("num blocks not found");
+    // More edgecases
+    table[ECL::Medium as usize][15] = 10;
+    table[ECL::Medium as usize][19] = 14;
+    table[ECL::Medium as usize][38] = 45;
+
+    table
 }
 
 /// All generator polynomials for up to 30 error correction codewords.
 /// The coefficients are stored as their exponent, starting from the second largest degree.
 /// This EXCLUDES the coefficient of the largest degree, which is a^0.
-pub const GEN_POLYNOMIALS: [[u8; 30]; 31] = make_polynomials();
+pub const GEN_POLYNOMIALS: [[u8; 30]; 31] = gen_polynomials();
 
-const fn make_polynomials() -> [[u8; 30]; 31] {
+const fn gen_polynomials() -> [[u8; 30]; 31] {
     let mut table = [[0; 30]; 31];
 
     // In this loop, i is the number of error correcting codewords this polynomial is for

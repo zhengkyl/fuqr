@@ -1,11 +1,11 @@
 use std::cmp::min;
 
-use ecc::{num_blocks, ECC_TABLE, GEN_POLYNOMIALS};
+use error_correction::{ECL, GEN_POLYNOMIALS, NUM_BLOCKS, NUM_CODEWORDS};
 use math::{ANTILOG_TABLE, LOG_TABLE};
-use qr::{encode_alphanumeric, QRCode, ECL};
+use qr::{encode_alphanumeric, QRCode};
 use version::Version;
 
-pub mod ecc;
+pub mod error_correction;
 pub mod math;
 pub mod qr;
 pub mod version;
@@ -13,7 +13,7 @@ pub mod version;
 pub fn encode(input: &str) -> QRCode {
     let mut qrcode = QRCode {
         data: Vec::new(),
-        ecc: ECL::Low,
+        ecl: ECL::Low,
         mask: 1,
         version: Version(1),
     };
@@ -25,7 +25,7 @@ pub fn encode(input: &str) -> QRCode {
     let codewords = modules / 8;
     let remainder_bits = modules % 8;
 
-    let ec_codewords = ECC_TABLE[qrcode.ecc as usize][qrcode.version.0 as usize] as usize;
+    let ec_codewords = NUM_CODEWORDS[qrcode.ecl as usize][qrcode.version.0 as usize] as usize;
     let data_codewords = codewords - ec_codewords;
 
     // terminator
@@ -44,7 +44,7 @@ pub fn encode(input: &str) -> QRCode {
         alternating_byte ^= 0b11111101;
     }
 
-    let blocks = num_blocks(&qrcode) as usize;
+    let blocks = NUM_BLOCKS[qrcode.ecl as usize][qrcode.version.0 as usize] as usize;
 
     let num_group_2 = codewords % blocks;
     let num_group_1 = blocks - num_group_2;
