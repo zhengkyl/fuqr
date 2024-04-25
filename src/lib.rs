@@ -25,18 +25,18 @@ pub fn encode(input: &str) -> QRCode {
     let codewords = modules / 8;
     let remainder_bits = modules % 8;
 
-    let ec_codewords = NUM_CODEWORDS[qrcode.ecl as usize][qrcode.version.0 as usize] as usize;
-    let data_codewords = codewords - ec_codewords;
+    let num_ec_codewords = NUM_CODEWORDS[qrcode.ecl as usize][qrcode.version.0 as usize] as usize;
+    let num_data_codewords = codewords - num_ec_codewords;
 
     // terminator
-    let remainder_data_bits = (data_codewords * 8) - (qrcode.data.len());
+    let remainder_data_bits = (num_data_codewords * 8) - (qrcode.data.len());
     qrcode.push_bits(0, min(4, remainder_data_bits));
 
     // byte align
     let byte_pad = (8 - (qrcode.data.len() % 8)) % 8;
     qrcode.push_bits(0, byte_pad);
 
-    let data_pad = data_codewords - (qrcode.data.len() / 8);
+    let data_pad = num_data_codewords - (qrcode.data.len() / 8);
 
     let mut alternating_byte = 0b11101100;
     for _ in 0..data_pad {
@@ -46,39 +46,50 @@ pub fn encode(input: &str) -> QRCode {
 
     let blocks = NUM_BLOCKS[qrcode.ecl as usize][qrcode.version.0 as usize] as usize;
 
-    let num_group_2 = codewords % blocks;
-    let num_group_1 = blocks - num_group_2;
+    let group_2_blocks = codewords % blocks;
+    let group_1_blocks = blocks - group_2_blocks;
 
-    let binding = qrcode.get_u8_data();
-    let data_slice = binding.as_slice();
+    let data_codeword_vec = qrcode.get_u8_data();
+    let data_codewords = data_codeword_vec.as_slice();
 
-    let data_per_block = data_codewords / blocks;
+    let data_per_g1_block = num_data_codewords / blocks;
+    let data_per_g2_block = data_per_g1_block + 1;
 
-    let ecc_per_block = ec_codewords / blocks;
-
+    let ecc_per_block = num_ec_codewords / blocks;
     let mut final_sequence = vec![0; codewords];
 
-    for i in 0..num_group_1 {
+    for i in 0..group_1_blocks * data_per_g1_block {
+        let col = i % data_per_g1_block;
+        let row = i / data_per_g1_block;
+        final_sequence[col * blocks + row] = data_codewords[i];
+    }
+    for i in 0..group_2_blocks * data_per_g2_block {
+        let col = i % data_per_g2_block;
+        let row = i / data_per_g2_block;
+        final_sequence[col * blocks + row + group_1_blocks] = data_codewords[i];
+    }
+
+    for i in 0..group_1_blocks {
         let ec_codewords = remainder(
-            &data_slice[(i * data_per_block)..(i + data_per_block)],
+            &data_codewords[(i * data_per_g1_block)..(i + data_per_g1_block)],
             &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
         );
 
         for j in 0..ec_codewords.len() {
-            final_sequence[data_codewords + j * blocks + i] = ec_codewords[j];
+            final_sequence[num_data_codewords + j * blocks + i] = ec_codewords[j];
         }
     }
 
-    let group_2_start = num_group_1 * data_per_block;
-    let data_per_block = data_per_block + 1;
-    for i in 0..num_group_2 {
+    let group_2_start = group_1_blocks * data_per_g1_block;
+
+    for i in 0..group_2_blocks {
         let ec_codewords = remainder(
-            &data_slice[(group_2_start + i * data_per_block)..(i + data_per_block)],
+            &data_codewords[(group_2_start + i * data_per_g2_block)..(i + data_per_g2_block)],
             &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
         );
 
         for j in 0..ec_codewords.len() {
-            final_sequence[data_codewords + j * blocks + i + num_group_1] = ec_codewords[j];
+            final_sequence[num_data_codewords + j * blocks + i + group_1_blocks] = ec_codewords[j];
         }
     }
 

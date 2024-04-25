@@ -64,7 +64,7 @@ pub const fn num_blocks() -> [[u8; 41]; 4] {
                         // Edgecase: there are never 3 blocks
                         blocks += 1;
                     }
-                    table[ecl][version] = blocks as u8;
+                    table[ecl][version] = blocks as u8; // max is 81
                     break;
                 }
                 per_block -= 1;
