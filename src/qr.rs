@@ -1,3 +1,5 @@
+use core::fmt;
+
 use crate::{error_correction::ECL, version::Version};
 
 #[derive(PartialEq, Eq)]
@@ -45,6 +47,58 @@ impl QRCode {
         self.version.0 * 4 + 17
     }
 }
+
+pub struct Symbol {
+    pub width: usize,
+    pub modules: Vec<bool>,
+}
+
+impl Symbol {
+    pub fn new(version: u8) -> Self {
+        let width = version as usize * 4 + 17;
+        Symbol {
+            width: width,
+            modules: vec![false; width * width],
+        }
+    }
+    pub fn set(&mut self, y: usize, x: usize) {
+        let i = y * self.width + x;
+        self.modules[i] = true;
+    }
+}
+impl fmt::Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Err(e) = writeln!(f) {
+            return Err(e);
+        }
+        for i in (0..self.width).step_by(2) {
+            for j in 0..self.width {
+                let top = self.modules[i * self.width + j];
+                let bot = if i < self.width - 1 {
+                    self.modules[(i + 1) * self.width + j]
+                } else {
+                    false
+                };
+                let c = match (top, bot) {
+                    (true, true) => '█',
+                    (true, false) => '▀',
+                    (false, true) => '▄',
+                    (false, false) => ' ',
+                };
+                if let Err(e) = write!(f, "{}", c) {
+                    return Err(e);
+                }
+            }
+
+            if let Err(e) = writeln!(f) {
+                return Err(e);
+            }
+        }
+
+        Ok(())
+    }
+}
+
 pub struct QRCode {
     pub data: Vec<bool>,
     pub ecl: ECL,

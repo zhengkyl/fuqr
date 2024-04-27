@@ -55,7 +55,7 @@ impl Version {
     }
 }
 
-fn format_information(qrcode: &QRCode) -> u32 {
+pub fn format_information(qrcode: &QRCode) -> u32 {
     let format = ((((qrcode.ecl as u8) << 3) | qrcode.mask) as u32) << 10;
     let mut dividend = format;
 

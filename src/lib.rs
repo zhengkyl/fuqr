@@ -2,8 +2,10 @@ use std::cmp::min;
 
 use error_correction::{ECL, GEN_POLYNOMIALS, NUM_BLOCKS, NUM_CODEWORDS};
 use math::{ANTILOG_TABLE, LOG_TABLE};
-use qr::{encode_alphanumeric, QRCode};
+use qr::{encode_alphanumeric, QRCode, Symbol};
 use version::Version;
+
+use crate::version::format_information;
 
 pub mod error_correction;
 pub mod math;
@@ -36,8 +38,8 @@ pub fn encode(input: &str) -> QRCode {
     let byte_pad = (8 - (qrcode.data.len() % 8)) % 8;
     qrcode.push_bits(0, byte_pad);
 
+    // fill data capacity
     let data_pad = num_data_codewords - (qrcode.data.len() / 8);
-
     let mut alternating_byte = 0b11101100;
     for _ in 0..data_pad {
         qrcode.push_bits(alternating_byte, 8);
@@ -95,6 +97,100 @@ pub fn encode(input: &str) -> QRCode {
 
     qrcode
 }
+
+pub fn place(qrcode: &QRCode) -> Symbol {
+    let mut symbol = Symbol::new(qrcode.version.0);
+    let width = qrcode.version.0 as usize * 4 + 17;
+
+    fn place_finder(symbol: &mut Symbol, mut row: usize, col: usize) {
+        for i in 0..7 {
+            symbol.set(row, col + i);
+        }
+        row += 1;
+
+        symbol.set(row, col + 0);
+        symbol.set(row, col + 6);
+        row += 1;
+
+        for _ in 0..3 {
+            symbol.set(row, col + 0);
+
+            symbol.set(row, col + 2);
+            symbol.set(row, col + 3);
+            symbol.set(row, col + 4);
+
+            symbol.set(row, col + 6);
+            row += 1;
+        }
+
+        symbol.set(row, col + 0);
+        symbol.set(row, col + 6);
+
+        row += 1;
+        for i in 0..7 {
+            symbol.set(row, col + i);
+        }
+    }
+
+    fn place_format(symbol: &mut Symbol, format_info: u32) {
+        let first_coords = [
+            [0, 8],
+            [1, 8],
+            [2, 8],
+            [3, 8],
+            [4, 8],
+            [5, 8],
+            [7, 8],
+            [8, 8],
+            [8, 7],
+            [8, 5],
+            [8, 4],
+            [8, 3],
+            [8, 2],
+            [8, 1],
+            [8, 0],
+        ];
+        let second_coords = [
+            [8, symbol.width - 1],
+            [8, symbol.width - 2],
+            [8, symbol.width - 3],
+            [8, symbol.width - 4],
+            [8, symbol.width - 5],
+            [8, symbol.width - 6],
+            [8, symbol.width - 7],
+            [8, symbol.width - 8],
+            [symbol.width - 7, 8],
+            [symbol.width - 6, 8],
+            [symbol.width - 5, 8],
+            [symbol.width - 4, 8],
+            [symbol.width - 3, 8],
+            [symbol.width - 2, 8],
+            [symbol.width - 1, 8],
+        ];
+        for i in 0..first_coords.len() {
+            if (format_info & (1 << i)) != 0 {
+                symbol.set(first_coords[i][0], first_coords[i][1]);
+            }
+        }
+        for i in 0..second_coords.len() {
+            if (format_info & (1 << i)) != 0 {
+                symbol.set(second_coords[i][0], second_coords[i][1]);
+            }
+        }
+
+        // always set
+        symbol.set(symbol.width - 8, 8);
+    }
+
+    place_finder(&mut symbol, 0, 0);
+    place_finder(&mut symbol, 0, width - 7);
+    place_finder(&mut symbol, width - 7, 0);
+
+    let format_info = format_information(qrcode);
+    place_format(&mut symbol, format_info);
+    symbol
+}
+
 fn remainder(data: &[u8], generator: &[u8]) -> Vec<u8> {
     let num_codewords = generator.len();
 

@@ -1,9 +1,11 @@
-use fuqr::error_correction::{ECL, NUM_BLOCKS};
+use fuqr::{
+    encode,
+    error_correction::{ECL, NUM_BLOCKS},
+    place,
+};
 
 fn main() {
-    // encode("");
-    dbg!(NUM_BLOCKS[ECL::Low as usize]);
-    dbg!(NUM_BLOCKS[ECL::Medium as usize]);
-    dbg!(NUM_BLOCKS[ECL::Quartile as usize]);
-    dbg!(NUM_BLOCKS[ECL::High as usize]);
+    let c = encode("");
+    let s = place(&c);
+    print!("{}", s);
 }
