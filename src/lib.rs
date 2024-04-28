@@ -5,7 +5,7 @@ use math::{ANTILOG_TABLE, LOG_TABLE};
 use qr::{encode_alphanumeric, QRCode, Symbol};
 use version::Version;
 
-use crate::version::format_information;
+use crate::version::{format_information, version_information};
 
 pub mod error_correction;
 pub mod math;
@@ -17,7 +17,7 @@ pub fn encode(input: &str) -> QRCode {
         data: Vec::new(),
         ecl: ECL::Low,
         mask: 1,
-        version: Version(40),
+        version: Version(7),
     };
 
     // todo, ensure version can contain before encode, mathable
@@ -175,8 +175,7 @@ pub fn place(qrcode: &QRCode) -> Symbol {
         }
     }
 
-    fn place_align(symbol: &mut Symbol) {
-        let version = (symbol.width - 17) / 4;
+    fn place_align(symbol: &mut Symbol, version: usize) {
         if version == 1 {
             return;
         }
@@ -221,15 +220,34 @@ pub fn place(qrcode: &QRCode) -> Symbol {
         }
     }
 
+    fn place_version(symbol: &mut Symbol, version: usize) {
+        if version < 7 {
+            return;
+        }
+        let info = version_information(version);
+
+        for i in 0..18 {
+            if info & (1 << i) == 0 {
+                continue;
+            }
+            let x = i / 3;
+            let y = i % 3;
+
+            symbol.set(x, y + symbol.width - 11);
+            symbol.set(y + symbol.width - 11, x);
+        }
+    }
+
     place_finder(&mut symbol, 0, 0);
     place_finder(&mut symbol, 0, width - 7);
     place_finder(&mut symbol, width - 7, 0);
 
     let format_info = format_information(qrcode);
     place_format(&mut symbol, format_info);
-
     place_timing(&mut symbol);
-    place_align(&mut symbol);
+
+    place_version(&mut symbol, qrcode.version.0 as usize);
+    place_align(&mut symbol, qrcode.version.0 as usize);
 
     symbol
 }
