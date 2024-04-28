@@ -17,7 +17,7 @@ pub fn encode(input: &str) -> QRCode {
         data: Vec::new(),
         ecl: ECL::Low,
         mask: 1,
-        version: Version(1),
+        version: Version(40),
     };
 
     // todo, ensure version can contain before encode, mathable
@@ -72,8 +72,9 @@ pub fn encode(input: &str) -> QRCode {
     }
 
     for i in 0..group_1_blocks {
+        let start = i * data_per_g1_block;
         let ec_codewords = remainder(
-            &data_codewords[(i * data_per_g1_block)..(i + data_per_g1_block)],
+            &data_codewords[(start)..(start + data_per_g1_block)],
             &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
         );
 
@@ -85,8 +86,9 @@ pub fn encode(input: &str) -> QRCode {
     let group_2_start = group_1_blocks * data_per_g1_block;
 
     for i in 0..group_2_blocks {
+        let start = group_2_start + i * data_per_g2_block;
         let ec_codewords = remainder(
-            &data_codewords[(group_2_start + i * data_per_g2_block)..(i + data_per_g2_block)],
+            &data_codewords[(start)..(start + data_per_g2_block)],
             &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
         );
 
@@ -102,84 +104,121 @@ pub fn place(qrcode: &QRCode) -> Symbol {
     let mut symbol = Symbol::new(qrcode.version.0);
     let width = qrcode.version.0 as usize * 4 + 17;
 
-    fn place_finder(symbol: &mut Symbol, mut row: usize, col: usize) {
+    fn place_finder(symbol: &mut Symbol, col: usize, mut row: usize) {
         for i in 0..7 {
-            symbol.set(row, col + i);
+            symbol.set(col + i, row);
         }
         row += 1;
 
-        symbol.set(row, col + 0);
-        symbol.set(row, col + 6);
+        symbol.set(col + 0, row);
+        symbol.set(col + 6, row);
         row += 1;
 
         for _ in 0..3 {
-            symbol.set(row, col + 0);
+            symbol.set(col + 0, row);
 
-            symbol.set(row, col + 2);
-            symbol.set(row, col + 3);
-            symbol.set(row, col + 4);
+            symbol.set(col + 2, row);
+            symbol.set(col + 3, row);
+            symbol.set(col + 4, row);
 
-            symbol.set(row, col + 6);
+            symbol.set(col + 6, row);
             row += 1;
         }
 
-        symbol.set(row, col + 0);
-        symbol.set(row, col + 6);
+        symbol.set(col + 0, row);
+        symbol.set(col + 6, row);
 
         row += 1;
         for i in 0..7 {
-            symbol.set(row, col + i);
+            symbol.set(col + i, row);
         }
     }
 
     fn place_format(symbol: &mut Symbol, format_info: u32) {
-        let first_coords = [
-            [0, 8],
-            [1, 8],
-            [2, 8],
-            [3, 8],
-            [4, 8],
-            [5, 8],
-            [7, 8],
-            [8, 8],
-            [8, 7],
-            [8, 5],
-            [8, 4],
-            [8, 3],
-            [8, 2],
-            [8, 1],
-            [8, 0],
-        ];
-        let second_coords = [
-            [8, symbol.width - 1],
-            [8, symbol.width - 2],
-            [8, symbol.width - 3],
-            [8, symbol.width - 4],
-            [8, symbol.width - 5],
-            [8, symbol.width - 6],
-            [8, symbol.width - 7],
-            [8, symbol.width - 8],
-            [symbol.width - 7, 8],
-            [symbol.width - 6, 8],
-            [symbol.width - 5, 8],
-            [symbol.width - 4, 8],
-            [symbol.width - 3, 8],
-            [symbol.width - 2, 8],
-            [symbol.width - 1, 8],
-        ];
-        for i in 0..first_coords.len() {
-            if (format_info & (1 << i)) != 0 {
-                symbol.set(first_coords[i][0], first_coords[i][1]);
+        for i in 0..15 {
+            if (format_info & (1 << i)) == 0 {
+                continue;
             }
-        }
-        for i in 0..second_coords.len() {
-            if (format_info & (1 << i)) != 0 {
-                symbol.set(second_coords[i][0], second_coords[i][1]);
-            }
+
+            let y = match i {
+                i if i < 6 => i,
+                6 => 7,
+                _ => 8,
+            };
+            let x = match i {
+                i if i < 8 => 8,
+                8 => 7,
+                _ => 14 - i,
+            };
+            symbol.set(x, y);
+
+            let y = match i {
+                i if i < 8 => 8,
+                _ => symbol.width - (15 - i),
+            };
+            let x = match i {
+                i if i < 8 => symbol.width - (i + 1),
+                _ => 8,
+            };
+            symbol.set(x, y);
         }
 
         // always set
-        symbol.set(symbol.width - 8, 8);
+        symbol.set(8, symbol.width - 8);
+    }
+
+    fn place_timing(symbol: &mut Symbol) {
+        let len = symbol.width - 16;
+        for i in (0..len).step_by(2) {
+            symbol.set(8 + i, 6);
+            symbol.set(6, 8 + i);
+        }
+    }
+
+    fn place_align(symbol: &mut Symbol) {
+        let version = (symbol.width - 17) / 4;
+        if version == 1 {
+            return;
+        }
+
+        let first = 6;
+        let last = symbol.width - 7;
+        let len = version / 7 + 2;
+        let mut coords = Vec::with_capacity(len);
+
+        coords.push(first);
+        if version >= 7 {
+            for i in (1..len - 1).rev() {
+                coords.push(last - i * ALIGN_COORD[version - 7]);
+            }
+        }
+        coords.push(last);
+
+        for i in 0..len {
+            for j in 0..len {
+                if (i == 0 && j == 0) || (i == 0 && j == len - 1) || (i == len - 1 && j == 0) {
+                    continue;
+                }
+
+                let col = coords[i] - 2;
+                let row = coords[j] - 2;
+
+                for i in 0..5 {
+                    symbol.set(col, row + i)
+                }
+
+                for i in 1..4 {
+                    symbol.set(col + i, row);
+                    symbol.set(col + i, row + 4);
+                }
+
+                symbol.set(col + 2, row + 2);
+
+                for i in 0..5 {
+                    symbol.set(col + 4, row + i)
+                }
+            }
+        }
     }
 
     place_finder(&mut symbol, 0, 0);
@@ -188,13 +227,27 @@ pub fn place(qrcode: &QRCode) -> Symbol {
 
     let format_info = format_information(qrcode);
     place_format(&mut symbol, format_info);
+
+    place_timing(&mut symbol);
+    place_align(&mut symbol);
+
     symbol
 }
+
+const ALIGN_COORD: [usize; 34] = [
+    16, 18, 20, 22, 24, 26, 28, // 7-13
+    20, 22, 24, 24, 26, 28, 28, // 14-20
+    22, 24, 24, 26, 26, 28, 28, // 21-27
+    24, 24, 26, 26, 26, 28, 28, // 28-34
+    24, 26, 26, 26, 28, 28, // 35-40
+];
 
 fn remainder(data: &[u8], generator: &[u8]) -> Vec<u8> {
     let num_codewords = generator.len();
 
-    let mut base = [0; 60];
+    // todo double check this length
+    let mut base = [0; 124 + 30];
+
     base[..data.len()].copy_from_slice(data);
 
     for i in 0..data.len() {

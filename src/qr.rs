@@ -61,8 +61,10 @@ impl Symbol {
             modules: vec![false; width * width],
         }
     }
-    pub fn set(&mut self, y: usize, x: usize) {
-        let i = y * self.width + x;
+    pub fn set(&mut self, x: usize, y: usize) {
+        // todo consider layout
+        // Writing data means zigzag up and down, right to left
+        let i = x * self.width + y;
         self.modules[i] = true;
     }
 }
@@ -71,11 +73,11 @@ impl fmt::Display for Symbol {
         if let Err(e) = writeln!(f) {
             return Err(e);
         }
-        for i in (0..self.width).step_by(2) {
-            for j in 0..self.width {
-                let top = self.modules[i * self.width + j];
-                let bot = if i < self.width - 1 {
-                    self.modules[(i + 1) * self.width + j]
+        for y in (0..self.width).step_by(2) {
+            for x in 0..self.width {
+                let top = self.modules[x * self.width + y];
+                let bot = if y < self.width - 1 {
+                    self.modules[x * self.width + y + 1]
                 } else {
                     false
                 };
