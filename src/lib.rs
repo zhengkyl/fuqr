@@ -73,7 +73,11 @@ pub fn encode(input: &str) -> QRCode {
     for i in 0..group_2_blocks * data_per_g2_block {
         let col = i % data_per_g2_block;
         let row = i / data_per_g2_block;
-        final_sequence[col * blocks + row + group_1_blocks] = data_codewords[i];
+
+        // 0 iff last column, else group_1_blocks
+        let row_offset = (1 - (col / (data_per_g2_block - 1))) * group_1_blocks;
+        final_sequence[col * blocks + row + row_offset] =
+            data_codewords[i + (group_1_blocks * data_per_g1_block)];
     }
 
     for i in 0..group_1_blocks {
@@ -101,7 +105,6 @@ pub fn encode(input: &str) -> QRCode {
             final_sequence[num_data_codewords + j * blocks + i + group_1_blocks] = ec_codewords[j];
         }
     }
-
     // todo
     qrcode.sequenced_data = final_sequence;
     qrcode
@@ -295,7 +298,6 @@ pub fn place(qrcode: &QRCode) -> Symbol {
 
             let mask = (col + row) & 1 == 0;
             symbol.set(col, row, on ^ mask);
-            // symbol.set(col, row, on);
         }
     }
 
