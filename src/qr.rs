@@ -1,5 +1,3 @@
-use core::fmt;
-
 use crate::{error_correction::ECL, version::Version};
 
 #[derive(PartialEq, Eq)]
@@ -48,61 +46,9 @@ impl QRCode {
     }
 }
 
-pub struct Symbol {
-    pub width: usize,
-    pub modules: Vec<bool>,
-}
-
-impl Symbol {
-    pub fn new(version: u8) -> Self {
-        let width = version as usize * 4 + 17;
-        Symbol {
-            width: width,
-            modules: vec![false; width * width],
-        }
-    }
-    pub fn set(&mut self, x: usize, y: usize) {
-        // todo consider layout
-        // Writing data means zigzag up and down, right to left
-        let i = x * self.width + y;
-        self.modules[i] = true;
-    }
-}
-impl fmt::Display for Symbol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Err(e) = writeln!(f) {
-            return Err(e);
-        }
-        for y in (0..self.width).step_by(2) {
-            for x in 0..self.width {
-                let top = self.modules[x * self.width + y];
-                let bot = if y < self.width - 1 {
-                    self.modules[x * self.width + y + 1]
-                } else {
-                    false
-                };
-                let c = match (top, bot) {
-                    (true, true) => '█',
-                    (true, false) => '▀',
-                    (false, true) => '▄',
-                    (false, false) => ' ',
-                };
-                if let Err(e) = write!(f, "{}", c) {
-                    return Err(e);
-                }
-            }
-
-            if let Err(e) = writeln!(f) {
-                return Err(e);
-            }
-        }
-
-        Ok(())
-    }
-}
-
 pub struct QRCode {
     pub data: Vec<bool>,
+    pub sequenced_data: Vec<u8>,
     pub ecl: ECL,
     pub mask: u8,         // 1  - 8
     pub version: Version, // 1 - 40
@@ -225,6 +171,7 @@ mod tests {
     fn encode_numeric_works() {
         let mut qrcode = QRCode {
             data: Vec::new(),
+            sequenced_data: Vec::new(),
             mask: 0,
             version: Version(1),
             ecl: ECL::Low,
@@ -249,6 +196,7 @@ mod tests {
     fn encode_alphanumeric_works() {
         let mut qrcode = QRCode {
             data: Vec::new(),
+            sequenced_data: Vec::new(),
             mask: 0,
             version: Version(1),
             ecl: ECL::Low,
@@ -273,6 +221,7 @@ mod tests {
     fn encode_byte_works() {
         let mut qrcode = QRCode {
             data: Vec::new(),
+            sequenced_data: Vec::new(),
             mask: 0,
             version: Version(1),
             ecl: ECL::Low,

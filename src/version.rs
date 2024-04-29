@@ -84,6 +84,7 @@ mod tests {
     fn format_information_works() {
         let mut qrcode = QRCode {
             data: Vec::new(),
+            sequenced_data: Vec::new(),
             version: Version(1),
             ecl: ECL::Medium,
             mask: 0,

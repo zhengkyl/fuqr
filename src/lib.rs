@@ -2,22 +2,27 @@ use std::cmp::min;
 
 use error_correction::{ECL, GEN_POLYNOMIALS, NUM_BLOCKS, NUM_CODEWORDS};
 use math::{ANTILOG_TABLE, LOG_TABLE};
-use qr::{encode_alphanumeric, QRCode, Symbol};
+use qr::{encode_alphanumeric, QRCode};
 use version::Version;
 
-use crate::version::{format_information, version_information};
+use crate::{
+    symbol::{Symbol, MODULE},
+    version::{format_information, version_information},
+};
 
 pub mod error_correction;
 pub mod math;
 pub mod qr;
+pub mod symbol;
 pub mod version;
 
 pub fn encode(input: &str) -> QRCode {
     let mut qrcode = QRCode {
         data: Vec::new(),
+        sequenced_data: Vec::new(),
         ecl: ECL::Low,
-        mask: 1,
-        version: Version(7),
+        mask: 0,
+        version: Version(1),
     };
 
     // todo, ensure version can contain before encode, mathable
@@ -58,7 +63,7 @@ pub fn encode(input: &str) -> QRCode {
     let data_per_g2_block = data_per_g1_block + 1;
 
     let ecc_per_block = num_ec_codewords / blocks;
-    let mut final_sequence = vec![0; codewords];
+    let mut final_sequence = vec![0; codewords + (remainder_bits + 7) / 8];
 
     for i in 0..group_1_blocks * data_per_g1_block {
         let col = i % data_per_g1_block;
@@ -97,6 +102,8 @@ pub fn encode(input: &str) -> QRCode {
         }
     }
 
+    // todo
+    qrcode.sequenced_data = final_sequence;
     qrcode
 }
 
@@ -106,39 +113,43 @@ pub fn place(qrcode: &QRCode) -> Symbol {
 
     fn place_finder(symbol: &mut Symbol, col: usize, mut row: usize) {
         for i in 0..7 {
-            symbol.set(col + i, row);
+            symbol.set(col + i, row, true);
         }
         row += 1;
 
-        symbol.set(col + 0, row);
-        symbol.set(col + 6, row);
+        symbol.set(col + 0, row, true);
+        for i in 1..6 {
+            symbol.set(col + i, row, false);
+        }
+        symbol.set(col + 6, row, true);
         row += 1;
 
         for _ in 0..3 {
-            symbol.set(col + 0, row);
-
-            symbol.set(col + 2, row);
-            symbol.set(col + 3, row);
-            symbol.set(col + 4, row);
-
-            symbol.set(col + 6, row);
+            symbol.set(col + 0, row, true);
+            symbol.set(col + 1, row, false);
+            symbol.set(col + 2, row, true);
+            symbol.set(col + 3, row, true);
+            symbol.set(col + 4, row, true);
+            symbol.set(col + 5, row, false);
+            symbol.set(col + 6, row, true);
             row += 1;
         }
 
-        symbol.set(col + 0, row);
-        symbol.set(col + 6, row);
-
+        symbol.set(col + 0, row, true);
+        for i in 1..6 {
+            symbol.set(col + i, row, false);
+        }
+        symbol.set(col + 6, row, true);
         row += 1;
+
         for i in 0..7 {
-            symbol.set(col + i, row);
+            symbol.set(col + i, row, true);
         }
     }
 
     fn place_format(symbol: &mut Symbol, format_info: u32) {
         for i in 0..15 {
-            if (format_info & (1 << i)) == 0 {
-                continue;
-            }
+            let on = (format_info & (1 << i)) != 0;
 
             let y = match i {
                 i if i < 6 => i,
@@ -150,7 +161,7 @@ pub fn place(qrcode: &QRCode) -> Symbol {
                 8 => 7,
                 _ => 14 - i,
             };
-            symbol.set(x, y);
+            symbol.set(x, y, on);
 
             let y = match i {
                 i if i < 8 => 8,
@@ -160,18 +171,19 @@ pub fn place(qrcode: &QRCode) -> Symbol {
                 i if i < 8 => symbol.width - (i + 1),
                 _ => 8,
             };
-            symbol.set(x, y);
+            symbol.set(x, y, on);
         }
 
         // always set
-        symbol.set(8, symbol.width - 8);
+        symbol.set(8, symbol.width - 8, true);
     }
 
     fn place_timing(symbol: &mut Symbol) {
         let len = symbol.width - 16;
-        for i in (0..len).step_by(2) {
-            symbol.set(8 + i, 6);
-            symbol.set(6, 8 + i);
+        for i in 0..len {
+            let even = i & 1 == 0;
+            symbol.set(8 + i, 6, even);
+            symbol.set(6, 8 + i, even);
         }
     }
 
@@ -203,18 +215,21 @@ pub fn place(qrcode: &QRCode) -> Symbol {
                 let row = coords[j] - 2;
 
                 for i in 0..5 {
-                    symbol.set(col, row + i)
+                    symbol.set(col, row + i, true)
                 }
 
                 for i in 1..4 {
-                    symbol.set(col + i, row);
-                    symbol.set(col + i, row + 4);
+                    symbol.set(col + i, row, true);
+                    symbol.set(col + i, row + 1, false);
+                    symbol.set(col + i, row + 2, false);
+                    symbol.set(col + i, row + 3, false);
+                    symbol.set(col + i, row + 4, true);
                 }
 
-                symbol.set(col + 2, row + 2);
+                symbol.set(col + 2, row + 2, true);
 
                 for i in 0..5 {
-                    symbol.set(col + 4, row + i)
+                    symbol.set(col + 4, row + i, true)
                 }
             }
         }
@@ -227,20 +242,39 @@ pub fn place(qrcode: &QRCode) -> Symbol {
         let info = version_information(version);
 
         for i in 0..18 {
-            if info & (1 << i) == 0 {
-                continue;
-            }
+            let on = info & (1 << i) != 0;
+
             let x = i / 3;
             let y = i % 3;
 
-            symbol.set(x, y + symbol.width - 11);
-            symbol.set(y + symbol.width - 11, x);
+            symbol.set(x, y + symbol.width - 11, on);
+            symbol.set(y + symbol.width - 11, x, on);
         }
     }
 
     place_finder(&mut symbol, 0, 0);
+    for i in 0..8 {
+        symbol.set(i, 7, false);
+    }
+    for i in 0..7 {
+        symbol.set(7, i, false);
+    }
+
     place_finder(&mut symbol, 0, width - 7);
+    for i in 0..8 {
+        symbol.set(i, symbol.width - 8, false);
+    }
+    for i in 0..7 {
+        symbol.set(7, symbol.width - 1 - i, false);
+    }
+
     place_finder(&mut symbol, width - 7, 0);
+    for i in 0..8 {
+        symbol.set(symbol.width - 1 - i, 7, false);
+    }
+    for i in 0..7 {
+        symbol.set(symbol.width - 8, i, false);
+    }
 
     let format_info = format_information(qrcode);
     place_format(&mut symbol, format_info);
@@ -248,6 +282,55 @@ pub fn place(qrcode: &QRCode) -> Symbol {
 
     place_version(&mut symbol, qrcode.version.0 as usize);
     place_align(&mut symbol, qrcode.version.0 as usize);
+
+    let mut i = 0;
+
+    let mut col = symbol.width - 1;
+    let mut row = symbol.width - 1;
+
+    fn place_module(symbol: &mut Symbol, col: usize, row: usize, data: &Vec<u8>, i: &mut usize) {
+        if symbol.get(col, row) == MODULE::UNSET {
+            let on = data[*i / 8] & (1 << (7 - (*i % 8))) != 0;
+            *i += 1;
+
+            let mask = (col + row) & 1 == 0;
+            symbol.set(col, row, on ^ mask);
+            // symbol.set(col, row, on);
+        }
+    }
+
+    loop {
+        loop {
+            place_module(&mut symbol, col, row, &qrcode.sequenced_data, &mut i);
+            place_module(&mut symbol, col - 1, row, &qrcode.sequenced_data, &mut i);
+            if row == 0 {
+                break;
+            }
+            row -= 1;
+        }
+
+        col -= 2;
+        if col == 6 {
+            col -= 1;
+        }
+
+        loop {
+            place_module(&mut symbol, col, row, &qrcode.sequenced_data, &mut i);
+            place_module(&mut symbol, col - 1, row, &qrcode.sequenced_data, &mut i);
+            if row == symbol.width - 1 {
+                break;
+            }
+            row += 1;
+        }
+
+        if col == 1 {
+            break;
+        }
+        col -= 2;
+    }
+
+    // TODO masking -> blindly mask then reapply fixed patterns?
+    // or use enum for modules? 0, 1, 2=empty?
 
     symbol
 }
@@ -273,7 +356,7 @@ fn remainder(data: &[u8], generator: &[u8]) -> Vec<u8> {
             continue;
         }
 
-        let alpha_diff = ANTILOG_TABLE[data[i] as usize];
+        let alpha_diff = ANTILOG_TABLE[base[i] as usize];
 
         for j in 0..generator.len() {
             base[i + j + 1] ^= LOG_TABLE[(generator[j] as usize + alpha_diff as usize) % 255];
