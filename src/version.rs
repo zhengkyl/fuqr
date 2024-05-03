@@ -9,35 +9,6 @@ impl Version {
         assert!(version >= 1 && version <= 40);
         Version(version)
     }
-
-    pub fn num_data_modules(self) -> usize {
-        let width = 4 * (self.0 as usize) + 17;
-
-        let mut modules = width * width;
-
-        modules -= 64 * 3; // finder markers + separator
-        modules -= 31; // format
-        modules -= 2 * (width - 16); // timing
-
-        let (align, overlap) = match self.0 {
-            1 => (0, 0),
-            x if x <= 6 => (1, 0),
-            x if x <= 13 => (6, 2),
-            x if x <= 20 => (13, 4),
-            x if x <= 27 => (22, 6),
-            x if x <= 34 => (33, 8),
-            x if x <= 40 => (46, 10),
-            _ => unreachable!(),
-        };
-        modules -= align * 25;
-        modules += overlap * 5;
-
-        if self.0 >= 7 {
-            modules -= 36; // 2 version
-        }
-
-        modules
-    }
 }
 
 // See Annex D for explaination

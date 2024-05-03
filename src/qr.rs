@@ -19,7 +19,6 @@ impl QRCode {
 }
 
 pub struct QRCode {
-    // pub data: Vec<bool>,
     pub sequenced_data: Vec<u8>,
     pub ecl: ECL,
     pub mask: u8,         // 1  - 8
@@ -48,11 +47,11 @@ fn bits_char_count_indicator(version: u8, mode: Mode) -> usize {
 }
 
 // input fits in u8 b/c numeric
-pub fn encode_numeric(qrcode: &mut QRData, input: &str) {
-    qrcode.push_bits(0b0001, 4);
-    qrcode.push_bits(
+pub fn encode_numeric(qrdata: &mut QRData, input: &str) {
+    qrdata.push_bits(0b0001, 4);
+    qrdata.push_bits(
         input.len(),
-        bits_char_count_indicator(qrcode.version.0, Mode::Numeric),
+        bits_char_count_indicator(qrdata.version.0, Mode::Numeric),
     );
 
     let input = input.as_bytes();
@@ -60,17 +59,17 @@ pub fn encode_numeric(qrcode: &mut QRData, input: &str) {
         let group = (input[i * 3] - b'0') as usize * 100
             + (input[i * 3 + 1] - b'0') as usize * 10
             + (input[i * 3 + 2] - b'0') as usize;
-        qrcode.push_bits(group, 10);
+        qrdata.push_bits(group, 10);
     }
 
     match input.len() % 3 {
         1 => {
             let group = input[input.len() - 1] - b'0';
-            qrcode.push_bits(group.into(), 4);
+            qrdata.push_bits(group.into(), 4);
         }
         2 => {
             let group = (input[input.len() - 2] - b'0') * 10 + (input[input.len() - 1] - b'0');
-            qrcode.push_bits(group.into(), 7);
+            qrdata.push_bits(group.into(), 7);
         }
         _ => (),
     }
@@ -92,11 +91,11 @@ fn ascii_to_b45(c: u8) -> u8 {
         _ => unreachable!("Not b45 encodable"),
     }
 }
-pub fn encode_alphanumeric(qrcode: &mut QRData, input: &str) {
-    qrcode.push_bits(0b0010, 4);
-    qrcode.push_bits(
+pub fn encode_alphanumeric(qrdata: &mut QRData, input: &str) {
+    qrdata.push_bits(0b0010, 4);
+    qrdata.push_bits(
         input.len(),
-        bits_char_count_indicator(qrcode.version.0, Mode::Alphanumeric),
+        bits_char_count_indicator(qrdata.version.0, Mode::Alphanumeric),
     );
 
     let input = input.as_bytes();
@@ -104,23 +103,23 @@ pub fn encode_alphanumeric(qrcode: &mut QRData, input: &str) {
     for i in 0..(input.len() / 2) {
         let group =
             ascii_to_b45(input[i * 2]) as usize * 45 + ascii_to_b45(input[i * 2 + 1]) as usize;
-        qrcode.push_bits(group, 11);
+        qrdata.push_bits(group, 11);
     }
 
     if (input.len() & 1) == 1 {
-        qrcode.push_bits(ascii_to_b45(input[input.len() - 1]).into(), 6);
+        qrdata.push_bits(ascii_to_b45(input[input.len() - 1]).into(), 6);
     }
 }
 
 // ISO-8859-1 aka first 256 unicode
-pub fn encode_byte(qrcode: &mut QRData, input: &str) {
-    qrcode.push_bits(0b0100, 4);
-    qrcode.push_bits(
+pub fn encode_byte(qrdata: &mut QRData, input: &str) {
+    qrdata.push_bits(0b0100, 4);
+    qrdata.push_bits(
         input.len(),
-        bits_char_count_indicator(qrcode.version.0, Mode::Byte),
+        bits_char_count_indicator(qrdata.version.0, Mode::Byte),
     );
     for c in input.as_bytes() {
-        qrcode.push_bits((*c).into(), 8);
+        qrdata.push_bits((*c).into(), 8);
     }
 }
 

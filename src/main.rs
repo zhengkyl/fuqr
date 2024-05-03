@@ -1,4 +1,4 @@
-use fuqr::{encode, place, qr::Mode, version::Version, Segment};
+use fuqr::{encode, qr::Mode, symbol::place, version::Version, Segment};
 
 fn main() {
     let c = encode(
