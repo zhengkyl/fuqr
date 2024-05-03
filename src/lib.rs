@@ -1,8 +1,9 @@
 use std::cmp::min;
 
+use data::QRData;
 use error_correction::{ECL, GEN_POLYNOMIALS, NUM_BLOCKS, NUM_CODEWORDS};
 use math::{ANTILOG_TABLE, LOG_TABLE};
-use qr::{encode_alphanumeric, QRCode};
+use qr::{encode_alphanumeric, Mode, QRCode};
 use version::Version;
 
 use crate::{
@@ -10,54 +11,60 @@ use crate::{
     version::{format_information, version_information},
 };
 
+pub mod data;
 pub mod error_correction;
 pub mod math;
 pub mod qr;
 pub mod symbol;
 pub mod version;
 
-pub fn encode(input: &str) -> QRCode {
+pub struct Segment<'a> {
+    pub mode: Mode,
+    pub text: &'a str, // max length is 7089 numeric, v40, low
+}
+
+pub fn encode(segments: Vec<Segment>, min_version: Version, max_versio: Version) -> QRCode {
     let mut qrcode = QRCode {
-        data: Vec::new(),
         sequenced_data: Vec::new(),
         ecl: ECL::Low,
         mask: 0,
         version: Version(1),
     };
 
-    // todo, ensure version can contain before encode, mathable
+    let mut qrdata = QRData::new(Version(1));
 
-    encode_alphanumeric(&mut qrcode, "GREETINGS TRAVELER");
-    let modules = qrcode.version.num_data_modules();
+    // todo, ensure version can contain before encode, mathable
+    encode_alphanumeric(&mut qrdata, "GREETINGS TRAVELER");
+
+    let modules = qrdata.version.num_data_modules();
     let codewords = modules / 8;
     let remainder_bits = modules % 8;
 
-    let num_ec_codewords = NUM_CODEWORDS[qrcode.ecl as usize][qrcode.version.0 as usize] as usize;
+    let num_ec_codewords = NUM_CODEWORDS[qrcode.ecl as usize][qrdata.version.0 as usize] as usize;
     let num_data_codewords = codewords - num_ec_codewords;
 
     // terminator
-    let remainder_data_bits = (num_data_codewords * 8) - (qrcode.data.len());
-    qrcode.push_bits(0, min(4, remainder_data_bits));
+    let remainder_data_bits = (num_data_codewords * 8) - (qrdata.data.len());
+    qrdata.push_bits(0, min(4, remainder_data_bits));
 
     // byte align
-    let byte_pad = (8 - (qrcode.data.len() % 8)) % 8;
-    qrcode.push_bits(0, byte_pad);
+    let byte_pad = (8 - (qrdata.data.len() % 8)) % 8;
+    qrdata.push_bits(0, byte_pad);
 
     // fill data capacity
-    let data_pad = num_data_codewords - (qrcode.data.len() / 8);
+    let data_pad = num_data_codewords - (qrdata.data.len() / 8);
     let mut alternating_byte = 0b11101100;
     for _ in 0..data_pad {
-        qrcode.push_bits(alternating_byte, 8);
+        qrdata.push_bits(alternating_byte, 8);
         alternating_byte ^= 0b11111101;
     }
 
-    let blocks = NUM_BLOCKS[qrcode.ecl as usize][qrcode.version.0 as usize] as usize;
+    let blocks = NUM_BLOCKS[qrcode.ecl as usize][qrdata.version.0 as usize] as usize;
 
     let group_2_blocks = codewords % blocks;
     let group_1_blocks = blocks - group_2_blocks;
 
-    let data_codeword_vec = qrcode.get_u8_data();
-    let data_codewords = data_codeword_vec.as_slice();
+    let data_codewords = qrdata.data;
 
     let data_per_g1_block = num_data_codewords / blocks;
     let data_per_g2_block = data_per_g1_block + 1;

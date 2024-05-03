@@ -24,7 +24,10 @@ a big fu to qr codes
 - version (< 7) based on dist between finder patterns (reference algo)
 
 - why does Annex A contain generator polynomials for up to 68 error correction codewords?
+
   - 30 is the max possible, b/c 15 correctable errors per block
+
+- burger king commercial
 
 ## references
 

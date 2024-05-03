@@ -6,6 +6,7 @@ pub struct Version(pub u8);
 impl Version {
     // todo, debating where to put bound check
     pub fn new(version: u8) -> Self {
+        assert!(version >= 1 && version <= 40);
         Version(version)
     }
 
@@ -83,7 +84,6 @@ mod tests {
     #[test]
     fn format_information_works() {
         let mut qrcode = QRCode {
-            data: Vec::new(),
             sequenced_data: Vec::new(),
             version: Version(1),
             ecl: ECL::Medium,
