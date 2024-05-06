@@ -2,7 +2,6 @@
 const fn generate_log_table() -> [u8; 255] {
     let mut array = [0; 255];
     array[0] = 1;
-    // const for tracked here https://github.com/rust-lang/rust/issues/87575
     let mut i = 1;
     while i < 255 {
         array[i] = array[i - 1] << 1;

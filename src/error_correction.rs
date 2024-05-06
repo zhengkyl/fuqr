@@ -1,17 +1,11 @@
-use crate::math::{ANTILOG_TABLE, LOG_TABLE};
+use crate::{
+    math::{ANTILOG_TABLE, LOG_TABLE},
+    qrcode::ECL,
+};
 
-// values used while encoding format
-#[derive(Clone, Copy, PartialEq)]
-pub enum ECL {
-    Low = 1,      // 7
-    Medium = 0,   // 15
-    Quartile = 3, // 25
-    High = 2,     // 30
-}
+pub const NUM_EC_CODEWORDS: [[u16; 41]; 4] = num_ec_codewords();
 
-pub const NUM_CODEWORDS: [[u16; 41]; 4] = num_codewords();
-
-const fn num_codewords() -> [[u16; 41]; 4] {
+const fn num_ec_codewords() -> [[u16; 41]; 4] {
     let mut table = [[0; 41]; 4];
     table[ECL::Low as usize] = [
         0, 7, 10, 15, 20, 26, 36, 40, 48, 60, 72, 80, 96, 104, 120, 132, 144, 168, 180, 196, 224,
@@ -42,11 +36,11 @@ pub const fn num_blocks() -> [[u8; 41]; 4] {
     let mut table = [[0; 41]; 4];
 
     let mut ecl = 0;
-    while ecl < NUM_CODEWORDS.len() {
+    while ecl < NUM_EC_CODEWORDS.len() {
         let mut version = 1;
 
         while version <= 40 {
-            let codewords = NUM_CODEWORDS[ecl][version];
+            let codewords = NUM_EC_CODEWORDS[ecl][version];
 
             let correctable = codewords / 2;
             if correctable <= 15 {

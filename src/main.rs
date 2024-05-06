@@ -1,4 +1,9 @@
-use fuqr::{encode, qr::Mode, symbol::place, version::Version, Segment};
+use fuqr::{
+    encode,
+    qrcode::{Mask, Mode, Version},
+    symbol::place,
+    Segment,
+};
 
 fn main() {
     let c = encode(
@@ -7,8 +12,15 @@ fn main() {
             text: "GREETINGS TRAVELER",
         }],
         Version(1),
-        Version(40),
     );
-    let s = place(&c);
-    print!("{}", s);
+
+    for i in 0..8 {
+        let s = place(&c, Mask::new(i));
+        print!("{}", i);
+        print!("{}", s);
+        println!();
+        println!();
+        println!();
+        println!();
+    }
 }

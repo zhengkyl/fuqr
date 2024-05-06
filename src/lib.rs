@@ -1,31 +1,31 @@
 use std::cmp::min;
 
 use data::{QRData, NUM_DATA_MODULES};
-use error_correction::{ECL, GEN_POLYNOMIALS, NUM_BLOCKS, NUM_CODEWORDS};
+use encode::{encode_alphanumeric, encode_byte, encode_numeric};
+use error_correction::{GEN_POLYNOMIALS, NUM_BLOCKS, NUM_EC_CODEWORDS};
 use math::{ANTILOG_TABLE, LOG_TABLE};
-use qr::{encode_alphanumeric, encode_byte, encode_numeric, Mode, QRCode};
-use version::Version;
+use qrcode::{Mode, QRCode, Version, ECL};
 
 pub mod data;
+pub mod encode;
 pub mod error_correction;
 pub mod math;
-pub mod qr;
+pub mod qrcode;
 pub mod symbol;
-pub mod version;
 
 pub struct Segment<'a> {
     pub mode: Mode,
     pub text: &'a str, // max length is 7089 numeric, v40, low
 }
 
-pub fn encode(segments: Vec<Segment>, min_version: Version, max_version: Version) -> QRCode {
-    let mut qrdata = QRData::new(min_version);
+pub fn encode(segments: Vec<Segment>, version: Version) -> QRCode {
+    let mut qrdata = QRData::new(version);
 
-    let min_max_bits = (NUM_DATA_MODULES[min_version.0 as usize])
-        - (NUM_CODEWORDS[ECL::Low as usize][min_version.0 as usize] as usize * 8);
+    // let min_max_bits = (NUM_DATA_MODULES[version.0])
+    //     - (NUM_EC_CODEWORDS[ECL::Low as usize][version.0] as usize * 8);
 
-    let max_max_bits = (NUM_DATA_MODULES[max_version.0 as usize])
-        - (NUM_CODEWORDS[ECL::Low as usize][max_version.0 as usize] as usize * 8);
+    let max_max_bits =
+        (NUM_DATA_MODULES[40]) - (NUM_EC_CODEWORDS[ECL::Low as usize][40] as usize * 8);
 
     // TODO iff we cross a version with a diff header size, must recalculate everything?
 
@@ -41,22 +41,21 @@ pub fn encode(segments: Vec<Segment>, min_version: Version, max_version: Version
         }
     }
 
-    calculate(qrdata)
+    // data codewords depends on version
+    // ec codewords depend on data + ECL
+    QRCode {
+        codewords: calc_ecc_and_sequence(qrdata, ECL::Low),
+        version: version,
+        ecl: ECL::Low,
+    }
 }
 
-pub fn calculate(mut qrdata: QRData) -> QRCode {
-    let mut qrcode = QRCode {
-        sequenced_data: Vec::new(),
-        ecl: ECL::Low,
-        mask: 0,
-        version: qrdata.version,
-    };
-
-    let modules = NUM_DATA_MODULES[qrdata.version.0 as usize];
+pub fn calc_ecc_and_sequence(mut qrdata: QRData, ecl: ECL) -> Vec<u8> {
+    let modules = NUM_DATA_MODULES[qrdata.version.0];
     let codewords = modules / 8;
     let remainder_bits = modules % 8;
 
-    let num_ec_codewords = NUM_CODEWORDS[qrcode.ecl as usize][qrdata.version.0 as usize] as usize;
+    let num_ec_codewords = NUM_EC_CODEWORDS[ecl as usize][qrdata.version.0] as usize;
     let num_data_codewords = codewords - num_ec_codewords;
 
     // terminator
@@ -75,7 +74,7 @@ pub fn calculate(mut qrdata: QRData) -> QRCode {
         alternating_byte ^= 0b11111101;
     }
 
-    let blocks = NUM_BLOCKS[qrcode.ecl as usize][qrdata.version.0 as usize] as usize;
+    let blocks = NUM_BLOCKS[ecl as usize][qrdata.version.0] as usize;
 
     let group_2_blocks = codewords % blocks;
     let group_1_blocks = blocks - group_2_blocks;
@@ -128,9 +127,8 @@ pub fn calculate(mut qrdata: QRData) -> QRCode {
             final_sequence[num_data_codewords + j * blocks + i + group_1_blocks] = ec_codewords[j];
         }
     }
-    // todo
-    qrcode.sequenced_data = final_sequence;
-    qrcode
+
+    final_sequence
 }
 
 const ALIGN_COORD: [usize; 34] = [
@@ -141,7 +139,9 @@ const ALIGN_COORD: [usize; 34] = [
     24, 26, 26, 26, 28, 28, // 35-40
 ];
 
-fn remainder(data: &[u8], generator: &[u8]) -> Vec<u8> {
+// todo
+// benchmark potential optimizations
+pub fn remainder(data: &[u8], generator: &[u8]) -> Vec<u8> {
     let num_codewords = generator.len();
 
     // todo double check this length

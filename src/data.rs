@@ -1,6 +1,6 @@
 use crate::{
-    error_correction::{ECL, NUM_CODEWORDS},
-    version::Version,
+    error_correction::NUM_EC_CODEWORDS,
+    qrcode::{Version, ECL},
 };
 
 pub struct QRData {
@@ -11,8 +11,8 @@ pub struct QRData {
 
 impl QRData {
     pub fn new(version: Version) -> Self {
-        let data_size = (NUM_DATA_MODULES[version.0 as usize] / 8)
-            - NUM_CODEWORDS[ECL::Low as usize][version.0 as usize] as usize;
+        let data_size = (NUM_DATA_MODULES[version.0] / 8)
+            - NUM_EC_CODEWORDS[ECL::Low as usize][version.0] as usize;
 
         QRData {
             version: version,

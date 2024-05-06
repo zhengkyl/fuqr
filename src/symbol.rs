@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::{
-    qr::QRCode,
-    version::{format_information, version_information},
+    encode::{format_information, version_information},
+    qrcode::{Mask, QRCode, Version},
     ALIGN_COORD,
 };
 
@@ -19,8 +19,8 @@ pub struct Symbol {
 }
 
 impl Symbol {
-    pub fn new(version: u8) -> Self {
-        let width = version as usize * 4 + 17;
+    pub fn new(version: usize) -> Self {
+        let width = version * 4 + 17;
         Symbol {
             width: width,
             modules: vec![MODULE::UNSET; width * width],
@@ -73,9 +73,9 @@ impl fmt::Display for Symbol {
     }
 }
 
-pub fn place(qrcode: &QRCode) -> Symbol {
+pub fn place(qrcode: &QRCode, mask: Mask) -> Symbol {
     let mut symbol = Symbol::new(qrcode.version.0);
-    let width = qrcode.version.0 as usize * 4 + 17;
+    let width = qrcode.version.0 * 4 + 17;
 
     fn place_finder(symbol: &mut Symbol, col: usize, mut row: usize) {
         for i in 0..7 {
@@ -153,7 +153,8 @@ pub fn place(qrcode: &QRCode) -> Symbol {
         }
     }
 
-    fn place_align(symbol: &mut Symbol, version: usize) {
+    fn place_align(symbol: &mut Symbol, version: Version) {
+        let version = version.0;
         if version == 1 {
             return;
         }
@@ -201,8 +202,8 @@ pub fn place(qrcode: &QRCode) -> Symbol {
         }
     }
 
-    fn place_version(symbol: &mut Symbol, version: usize) {
-        if version < 7 {
+    fn place_version(symbol: &mut Symbol, version: Version) {
+        if version.0 < 7 {
             return;
         }
         let info = version_information(version);
@@ -242,32 +243,49 @@ pub fn place(qrcode: &QRCode) -> Symbol {
         symbol.set(symbol.width - 8, i, false);
     }
 
-    let format_info = format_information(qrcode);
+    let format_info = format_information(qrcode.ecl, mask);
     place_format(&mut symbol, format_info);
     place_timing(&mut symbol);
 
-    place_version(&mut symbol, qrcode.version.0 as usize);
-    place_align(&mut symbol, qrcode.version.0 as usize);
+    place_version(&mut symbol, qrcode.version);
+    place_align(&mut symbol, qrcode.version);
 
     let mut i = 0;
 
     let mut col = symbol.width - 1;
     let mut row = symbol.width - 1;
 
-    fn place_module(symbol: &mut Symbol, col: usize, row: usize, data: &Vec<u8>, i: &mut usize) {
+    fn place_module(
+        symbol: &mut Symbol,
+        mask: Mask,
+        col: usize,
+        row: usize,
+        data: &Vec<u8>,
+        i: &mut usize,
+    ) {
         if symbol.get(col, row) == MODULE::UNSET {
             let on = data[*i / 8] & (1 << (7 - (*i % 8))) != 0;
             *i += 1;
 
-            let mask = (col + row) & 1 == 0;
-            symbol.set(col, row, on ^ mask);
+            let mask_bit = match mask {
+                Mask(0) => (row + col) % 2 == 0,
+                Mask(1) => (row) % 2 == 0,
+                Mask(2) => (col) % 3 == 0,
+                Mask(3) => (row + col) % 3 == 0,
+                Mask(4) => ((row / 2) + (col / 3)) % 2 == 0,
+                Mask(5) => ((row * col) % 2 + (row * col) % 3) == 0,
+                Mask(6) => ((row * col) % 2 + (row * col) % 3) % 2 == 0,
+                Mask(7) => ((row + col) % 2 + (row * col) % 3) % 2 == 0,
+                _ => unreachable!("bad mask"),
+            };
+            symbol.set(col, row, on ^ mask_bit);
         }
     }
 
     loop {
         loop {
-            place_module(&mut symbol, col, row, &qrcode.sequenced_data, &mut i);
-            place_module(&mut symbol, col - 1, row, &qrcode.sequenced_data, &mut i);
+            place_module(&mut symbol, mask, col, row, &qrcode.codewords, &mut i);
+            place_module(&mut symbol, mask, col - 1, row, &qrcode.codewords, &mut i);
             if row == 0 {
                 break;
             }
@@ -280,8 +298,8 @@ pub fn place(qrcode: &QRCode) -> Symbol {
         }
 
         loop {
-            place_module(&mut symbol, col, row, &qrcode.sequenced_data, &mut i);
-            place_module(&mut symbol, col - 1, row, &qrcode.sequenced_data, &mut i);
+            place_module(&mut symbol, mask, col, row, &qrcode.codewords, &mut i);
+            place_module(&mut symbol, mask, col - 1, row, &qrcode.codewords, &mut i);
             if row == symbol.width - 1 {
                 break;
             }
