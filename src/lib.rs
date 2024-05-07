@@ -4,14 +4,15 @@ use data::{QRData, NUM_DATA_MODULES};
 use encode::{encode_alphanumeric, encode_byte, encode_numeric};
 use error_correction::{GEN_POLYNOMIALS, NUM_BLOCKS, NUM_EC_CODEWORDS};
 use math::{ANTILOG_TABLE, LOG_TABLE};
-use qrcode::{Mode, QRCode, Version, ECL};
+use qrcode::{Mask, Mode, QRCode, Version, ECL};
 
 pub mod data;
 pub mod encode;
 pub mod error_correction;
 pub mod math;
+pub mod matrix;
 pub mod qrcode;
-pub mod symbol;
+pub mod render;
 
 pub struct Segment<'a> {
     pub mode: Mode,
@@ -47,6 +48,7 @@ pub fn encode(segments: Vec<Segment>, version: Version) -> QRCode {
         codewords: calc_ecc_and_sequence(qrdata, ECL::Low),
         version: version,
         ecl: ECL::Low,
+        mask: Mask(0),
     }
 }
 

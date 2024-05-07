@@ -2,8 +2,7 @@ pub struct QRCode {
     pub codewords: Vec<u8>,
     pub version: Version,
     pub ecl: ECL,
-    // todo mask only affects render
-    // pub mask: Mask,
+    pub mask: Mask,
 }
 
 #[derive(PartialEq, Eq)]

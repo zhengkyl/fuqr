@@ -1,26 +1,25 @@
+use std::fs;
+
 use fuqr::{
     encode,
-    qrcode::{Mask, Mode, Version},
-    symbol::place,
+    matrix::{place_all, Matrix},
+    qrcode::{Mode, Version},
+    render::{svg::render_svg, text::render_utf8},
     Segment,
 };
 
-fn main() {
-    let c = encode(
+fn main() -> std::io::Result<()> {
+    let qrcode = encode(
         vec![Segment {
             mode: Mode::Alphanumeric,
             text: "GREETINGS TRAVELER",
         }],
         Version(1),
     );
+    let mut matrix = Matrix::new(qrcode.version.0);
+    place_all(&mut matrix, &qrcode);
 
-    for i in 0..8 {
-        let s = place(&c, Mask::new(i));
-        print!("{}", i);
-        print!("{}", s);
-        println!();
-        println!();
-        println!();
-        println!();
-    }
+    fs::write("test.svg", render_svg(&matrix))?;
+    println!("{}", render_utf8(&matrix));
+    Ok(())
 }
