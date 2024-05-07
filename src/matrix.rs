@@ -1,7 +1,7 @@
 use crate::{
+    codewords::Codewords,
     encode::{format_information, version_information},
-    qrcode::{Mask, QRCode, Version, ECL},
-    ALIGN_COORD,
+    qrcode::{Mask, Version, ECL},
 };
 
 // todo, should be possible to set branchless
@@ -31,28 +31,46 @@ pub enum Module {
 }
 
 pub struct Matrix {
+    pub value: Vec<Module>,
     pub width: usize,
-    pub modules: Vec<Module>,
+    pub version: Version,
+    pub ecl: ECL,
+    pub mask: Mask,
 }
 
 impl Matrix {
-    pub fn new(version: usize) -> Self {
-        let width = version * 4 + 17;
-        Matrix {
-            width: width,
-            modules: vec![Module::Unset; width * width],
-        }
+    pub fn new(codewords: Codewords, mask: Mask) -> Self {
+        let width = codewords.version.0 * 4 + 17;
+        let mut matrix = Matrix {
+            width,
+            value: vec![Module::Unset; width * width],
+            version: codewords.version,
+            ecl: codewords.ecl,
+            mask,
+        };
+        place_all(&mut matrix, &codewords);
+
+        matrix
     }
-    pub fn set(&mut self, x: usize, y: usize, module: Module) {
+    fn set(&mut self, x: usize, y: usize, module: Module) {
         // todo consider layout
         // Writing data means zigzag up and down, right to left
         let i = x * self.width + y;
-        self.modules[i] = module;
+        self.value[i] = module;
     }
     pub fn get(&self, x: usize, y: usize) -> Module {
         let i = x * self.width + y;
-        self.modules[i]
+        self.value[i]
     }
+}
+
+fn place_all(matrix: &mut Matrix, codewords: &Codewords) {
+    place_finder(matrix);
+    place_format(matrix);
+    place_timing(matrix);
+    place_version(matrix);
+    place_alignment(matrix);
+    place_data(matrix, codewords);
 }
 
 fn place_finder(matrix: &mut Matrix) {
@@ -118,8 +136,8 @@ fn place_finder(matrix: &mut Matrix) {
     }
 }
 
-fn place_format(matrix: &mut Matrix, ecl: ECL, mask: Mask) {
-    let format_info = format_information(ecl, mask);
+fn place_format(matrix: &mut Matrix) {
+    let format_info = format_information(matrix.ecl, matrix.mask);
     for i in 0..15 {
         let module = if ((format_info >> i) & 1) == 1 {
             Module::FormatON
@@ -154,11 +172,11 @@ fn place_format(matrix: &mut Matrix, ecl: ECL, mask: Mask) {
     matrix.set(8, matrix.width - 8, Module::FormatON);
 }
 
-fn place_version(matrix: &mut Matrix, version: Version) {
-    if version.0 < 7 {
+fn place_version(matrix: &mut Matrix) {
+    if matrix.version.0 < 7 {
         return;
     }
-    let info = version_information(version);
+    let info = version_information(matrix.version);
 
     for i in 0..18 {
         let module = if (info >> i) & 1 == 1 {
@@ -188,8 +206,16 @@ fn place_timing(matrix: &mut Matrix) {
     }
 }
 
-fn place_alignment(matrix: &mut Matrix, version: Version) {
-    let version = version.0;
+const ALIGN_COORDS: [usize; 34] = [
+    16, 18, 20, 22, 24, 26, 28, // 7-13
+    20, 22, 24, 24, 26, 28, 28, // 14-20
+    22, 24, 24, 26, 26, 28, 28, // 21-27
+    24, 24, 26, 26, 26, 28, 28, // 28-34
+    24, 26, 26, 26, 28, 28, // 35-40
+];
+
+fn place_alignment(matrix: &mut Matrix) {
+    let version = matrix.version.0;
     if version == 1 {
         return;
     }
@@ -202,14 +228,14 @@ fn place_alignment(matrix: &mut Matrix, version: Version) {
     coords.push(first);
     if version >= 7 {
         for i in (1..len - 1).rev() {
-            coords.push(last - i * ALIGN_COORD[version - 7]);
+            coords.push(last - i * ALIGN_COORDS[version - 7]);
         }
     }
     coords.push(last);
 
     for i in 0..len {
         for j in 0..len {
-            if (i == 0 && j == 0) || (i == 0 && j == len - 1) || (i == len - 1 && j == 0) {
+            if (i == 0 && (j == 0 || j == len - 1)) || (i == len - 1 && j == 0) {
                 continue;
             }
 
@@ -237,25 +263,22 @@ fn place_alignment(matrix: &mut Matrix, version: Version) {
     }
 }
 
-pub fn place_all(matrix: &mut Matrix, qrcode: &QRCode) {
-    place_finder(matrix);
-    place_format(matrix, qrcode.ecl, qrcode.mask);
-    place_timing(matrix);
-    place_version(matrix, qrcode.version);
-    place_alignment(matrix, qrcode.version);
-    place_data(matrix, qrcode);
-}
-
 // This depends on all placements occuring beforehand
-pub fn place_data(matrix: &mut Matrix, qrcode: &QRCode) {
+fn place_data(matrix: &mut Matrix, qrcode: &Codewords) {
     let mut i = 0;
 
     let mut col = matrix.width - 1;
     let mut row = matrix.width - 1;
 
-    fn place_module(matrix: &mut Matrix, qrcode: &QRCode, col: usize, row: usize, i: &mut usize) {
+    fn place_module(
+        matrix: &mut Matrix,
+        qrcode: &Codewords,
+        col: usize,
+        row: usize,
+        i: &mut usize,
+    ) {
         if matrix.get(col, row) == Module::Unset {
-            let mask_bit = match qrcode.mask {
+            let mask_bit = match matrix.mask {
                 Mask(0) => (row + col) % 2 == 0,
                 Mask(1) => (row) % 2 == 0,
                 Mask(2) => (col) % 3 == 0,
@@ -266,7 +289,7 @@ pub fn place_data(matrix: &mut Matrix, qrcode: &QRCode) {
                 Mask(7) => ((row + col) % 2 + (row * col) % 3) % 2 == 0,
                 _ => unreachable!("bad mask"),
             } as u8;
-            let module = if ((qrcode.codewords[*i / 8] >> (7 - (*i % 8))) & 1) ^ mask_bit == 1 {
+            let module = if ((qrcode.value[*i / 8] >> (7 - (*i % 8))) & 1) ^ mask_bit == 1 {
                 Module::DataON
             } else {
                 Module::DataOFF

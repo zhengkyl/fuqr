@@ -4,6 +4,12 @@ use crate::{
 };
 
 pub const NUM_EC_CODEWORDS: [[u16; 41]; 4] = num_ec_codewords();
+pub const NUM_BLOCKS: [[u8; 41]; 4] = num_blocks();
+
+/// All generator polynomials for up to 30 error correction codewords.
+/// The coefficients are stored as their exponent, starting from the second largest degree.
+/// This EXCLUDES the coefficient of the largest degree, which is a^0.
+pub const GEN_POLYNOMIALS: [[u8; 30]; 31] = gen_polynomials();
 
 const fn num_ec_codewords() -> [[u16; 41]; 4] {
     let mut table = [[0; 41]; 4];
@@ -29,8 +35,6 @@ const fn num_ec_codewords() -> [[u16; 41]; 4] {
     ];
     table
 }
-
-pub const NUM_BLOCKS: [[u8; 41]; 4] = num_blocks();
 
 pub const fn num_blocks() -> [[u8; 41]; 4] {
     let mut table = [[0; 41]; 4];
@@ -77,11 +81,6 @@ pub const fn num_blocks() -> [[u8; 41]; 4] {
 
     table
 }
-
-/// All generator polynomials for up to 30 error correction codewords.
-/// The coefficients are stored as their exponent, starting from the second largest degree.
-/// This EXCLUDES the coefficient of the largest degree, which is a^0.
-pub const GEN_POLYNOMIALS: [[u8; 30]; 31] = gen_polynomials();
 
 const fn gen_polynomials() -> [[u8; 30]; 31] {
     let mut table = [[0; 30]; 31];

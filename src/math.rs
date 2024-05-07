@@ -1,3 +1,7 @@
+// note: a 256 * 256 mult table is a possible alternative
+pub const LOG_TABLE: [u8; 255] = generate_log_table();
+pub const ANTILOG_TABLE: [u8; 256] = generate_antilog_table();
+
 // 0 to 254
 const fn generate_log_table() -> [u8; 255] {
     let mut array = [0; 255];
@@ -30,7 +34,3 @@ const fn generate_antilog_table() -> [u8; 256] {
     }
     array
 }
-
-// note: a 256 * 256 mult table is a possible alternative
-pub const LOG_TABLE: [u8; 255] = generate_log_table();
-pub const ANTILOG_TABLE: [u8; 256] = generate_antilog_table();

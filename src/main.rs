@@ -1,23 +1,27 @@
 use std::fs;
 
 use fuqr::{
-    encode,
-    matrix::{place_all, Matrix},
-    qrcode::{Mode, Version},
+    codewords::Codewords,
+    data::{Data, Segment},
+    matrix::Matrix,
+    qrcode::{Mask, Mode, Version, ECL},
     render::{svg::render_svg, text::render_utf8},
-    Segment,
 };
 
 fn main() -> std::io::Result<()> {
-    let qrcode = encode(
+    let data = Data::new(
         vec![Segment {
             mode: Mode::Alphanumeric,
             text: "GREETINGS TRAVELER",
         }],
         Version(1),
     );
-    let mut matrix = Matrix::new(qrcode.version.0);
-    place_all(&mut matrix, &qrcode);
+    // todo
+    // rn codewords takes over data, but could copy to allow change ecl, version
+    let codewords = Codewords::new(data, ECL::Low);
+    let matrix = Matrix::new(codewords, Mask(0));
+    // todo
+    // func to change mask
 
     fs::write("test.svg", render_svg(&matrix))?;
     println!("{}", render_utf8(&matrix));

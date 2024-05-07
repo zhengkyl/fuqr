@@ -1,10 +1,10 @@
 use crate::{
-    data::QRData,
+    data::Data,
     qrcode::{Mask, Mode, Version, ECL},
 };
 
 // input fits in u8 b/c numeric
-pub fn encode_numeric(qrdata: &mut QRData, input: &str) {
+pub fn encode_numeric(qrdata: &mut Data, input: &str) {
     qrdata.push_bits(0b0001, 4);
     qrdata.push_bits(
         input.len(),
@@ -32,7 +32,7 @@ pub fn encode_numeric(qrdata: &mut QRData, input: &str) {
     }
 }
 
-pub fn encode_alphanumeric(qrdata: &mut QRData, input: &str) {
+pub fn encode_alphanumeric(qrdata: &mut Data, input: &str) {
     qrdata.push_bits(0b0010, 4);
     qrdata.push_bits(
         input.len(),
@@ -53,7 +53,7 @@ pub fn encode_alphanumeric(qrdata: &mut QRData, input: &str) {
 }
 
 // ISO-8859-1 aka first 256 unicode
-pub fn encode_byte(qrdata: &mut QRData, input: &str) {
+pub fn encode_byte(qrdata: &mut Data, input: &str) {
     qrdata.push_bits(0b0100, 4);
     qrdata.push_bits(
         input.len(),
@@ -109,7 +109,7 @@ fn bits_char_count_indicator(version: Version, mode: Mode) -> usize {
     if version.0 > 26 {
         base += 2
     }
-    return base;
+    base
 }
 
 fn ascii_to_b45(c: u8) -> u8 {
@@ -131,6 +131,8 @@ fn ascii_to_b45(c: u8) -> u8 {
 
 #[cfg(test)]
 mod tests {
+    use crate::data::Segment;
+
     use super::*;
     fn get_data_vec(bits: &str) -> Vec<u8> {
         let mut v = Vec::new();
@@ -162,48 +164,82 @@ mod tests {
 
     #[test]
     fn encode_numeric_works() {
-        let mut qrcode = QRData::new(Version(1));
+        let data = Data::new(
+            vec![Segment {
+                mode: Mode::Numeric,
+                text: "1",
+            }],
+            Version(1),
+        );
 
-        encode_numeric(&mut qrcode, "1");
-        assert_eq!(qrcode.data, get_data_vec("0001 0000000001 0001"));
+        assert_eq!(data.value, get_data_vec("0001 0000000001 0001"));
 
-        let mut qrcode = QRData::new(Version(1));
-        encode_numeric(&mut qrcode, "99");
-        assert_eq!(qrcode.data, get_data_vec("0001 0000000010 1100011"));
+        let data = Data::new(
+            vec![Segment {
+                mode: Mode::Numeric,
+                text: "99",
+            }],
+            Version(1),
+        );
+        assert_eq!(data.value, get_data_vec("0001 0000000010 1100011"));
 
-        let mut qrcode = QRData::new(Version(1));
-        encode_numeric(&mut qrcode, "123456");
+        let data = Data::new(
+            vec![Segment {
+                mode: Mode::Numeric,
+                text: "123456",
+            }],
+            Version(1),
+        );
         assert_eq!(
-            qrcode.data,
+            data.value,
             get_data_vec("0001 0000000110 0001111011 0111001000")
         );
     }
 
     #[test]
     fn encode_alphanumeric_works() {
-        let mut qrcode = QRData::new(Version(1));
+        let data = Data::new(
+            vec![Segment {
+                mode: Mode::Alphanumeric,
+                text: "1",
+            }],
+            Version(1),
+        );
+        assert_eq!(data.value, get_data_vec("0010 000000001 000001"));
 
-        encode_alphanumeric(&mut qrcode, "1");
-        assert_eq!(qrcode.data, get_data_vec("0010 000000001 000001"));
+        let data = Data::new(
+            vec![Segment {
+                mode: Mode::Alphanumeric,
+                text: "99",
+            }],
+            Version(1),
+        );
+        assert_eq!(data.value, get_data_vec("0010 000000010 00110011110"));
 
-        let mut qrcode = QRData::new(Version(1));
-        encode_alphanumeric(&mut qrcode, "99");
-        assert_eq!(qrcode.data, get_data_vec("0010 000000010 00110011110"));
-
-        let mut qrcode = QRData::new(Version(1));
-        encode_alphanumeric(&mut qrcode, "ABC1::4");
+        let data = Data::new(
+            vec![Segment {
+                mode: Mode::Alphanumeric,
+                text: "ABC1::4",
+            }],
+            Version(1),
+        );
         assert_eq!(
-            qrcode.data,
+            data.value,
             get_data_vec("0010 000000111 00111001101 01000011101 11111101000 000100")
         );
     }
 
     #[test]
     fn encode_byte_works() {
-        let mut qrcode = QRData::new(Version(1));
+        let data = Data::new(
+            vec![Segment {
+                mode: Mode::Byte,
+                text: "0",
+            }],
+            Version(1),
+        );
 
-        encode_byte(&mut qrcode, "0");
-        assert_eq!(qrcode.data, get_data_vec("0100 00000001 00110000"));
+        assert_eq!(data.value, get_data_vec("0100 00000001 00110000"));
     }
 
     #[test]
