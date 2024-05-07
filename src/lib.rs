@@ -61,15 +61,15 @@ pub fn calc_ecc_and_sequence(mut qrdata: QRData, ecl: ECL) -> Vec<u8> {
     let num_data_codewords = codewords - num_ec_codewords;
 
     // terminator
-    let remainder_data_bits = (num_data_codewords * 8) - (qrdata.data.len());
+    let remainder_data_bits = (num_data_codewords * 8) - (qrdata.bit_len);
     qrdata.push_bits(0, min(4, remainder_data_bits));
 
     // byte align
-    let byte_pad = (8 - (qrdata.data.len() % 8)) % 8;
+    let byte_pad = (8 - (qrdata.bit_len % 8)) % 8;
     qrdata.push_bits(0, byte_pad);
 
     // fill data capacity
-    let data_pad = num_data_codewords - (qrdata.data.len() / 8);
+    let data_pad = num_data_codewords - (qrdata.bit_len / 8);
     let mut alternating_byte = 0b11101100;
     for _ in 0..data_pad {
         qrdata.push_bits(alternating_byte, 8);

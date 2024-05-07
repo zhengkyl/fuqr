@@ -27,7 +27,6 @@ impl QRData {
         if gap >= len {
             let i = self.data.len() - 1;
             self.data[i] |= (input << (gap - len)) as u8;
-            self.bit_len += len;
             return;
         }
 
