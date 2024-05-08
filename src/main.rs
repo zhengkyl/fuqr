@@ -5,7 +5,7 @@ use fuqr::{
     data::{Data, Segment},
     matrix::Matrix,
     qrcode::{Mask, Mode, Version, ECL},
-    render::{svg::render_svg, text::render_utf8},
+    render::svg::{render_svg, FinderPattern, RenderOptions},
 };
 
 fn main() -> std::io::Result<()> {
@@ -22,8 +22,18 @@ fn main() -> std::io::Result<()> {
     let matrix = Matrix::new(codewords, Mask(0));
     // todo
     // func to change mask
-
-    fs::write("test.svg", render_svg(&matrix))?;
-    println!("{}", render_utf8(&matrix));
+    fs::write(
+        "test.svg",
+        render_svg(
+            &matrix,
+            RenderOptions::new()
+                .finder_pattern(FinderPattern::Cross)
+                .finder_roundness(0.5)
+                .scale(2.0)
+                .foreground("#fff")
+                .background("#111"),
+        ),
+    )?;
+    // println!("{}", render_utf8(&matrix));
     Ok(())
 }

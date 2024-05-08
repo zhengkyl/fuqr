@@ -6,3 +6,6 @@ pub mod math;
 pub mod matrix;
 pub mod qrcode;
 pub mod render;
+
+#[cfg(feature = "wasm")]
+mod wasm;

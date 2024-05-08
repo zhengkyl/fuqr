@@ -1,37 +1,3 @@
-// impl fmt::Display for Symbol {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         if let Err(e) = writeln!(f) {
-//             return Err(e);
-//         }
-//         for y in (0..self.width).step_by(2) {
-//             for x in 0..self.width {
-//                 let top = self.modules[x * self.width + y];
-//                 let bot = if y < self.width - 1 {
-//                     self.modules[x * self.width + y + 1]
-//                 } else {
-//                     MODULE::OFF
-//                 };
-//                 let c = match (top, bot) {
-//                     (MODULE::ON, MODULE::ON) => '█',
-//                     (MODULE::ON, MODULE::OFF) => '▀',
-//                     (MODULE::OFF, MODULE::ON) => '▄',
-//                     (MODULE::OFF, MODULE::OFF) => ' ',
-//                     _ => unreachable!("invalid symbol"),
-//                 };
-//                 if let Err(e) = write!(f, "{}", c) {
-//                     return Err(e);
-//                 }
-//             }
-
-//             if let Err(e) = writeln!(f) {
-//                 return Err(e);
-//             }
-//         }
-
-//         Ok(())
-//     }
-// }
-
 use crate::matrix::Matrix;
 
 pub fn render_utf8(matrix: &Matrix) -> String {
