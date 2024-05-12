@@ -1,5 +1,3 @@
-use std::cmp::min;
-
 use crate::{
     data::Data,
     error_correction::{GEN_POLYNOMIALS, NUM_BLOCKS, NUM_EC_CODEWORDS},
@@ -33,7 +31,12 @@ fn calc_ecc_and_sequence(mut qrdata: Data, ecl: ECL) -> Vec<u8> {
 
     // terminator
     let remainder_data_bits = (num_data_codewords * 8) - (qrdata.bit_len);
-    qrdata.push_bits(0, min(4, remainder_data_bits));
+    let term_len = if remainder_data_bits < 4 {
+        remainder_data_bits
+    } else {
+        4
+    };
+    qrdata.push_bits(0, term_len);
 
     // byte align
     let byte_pad = (8 - (qrdata.bit_len % 8)) % 8;

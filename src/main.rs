@@ -3,35 +3,35 @@ use std::fs;
 use fuqr::{
     codewords::Codewords,
     data::{Data, Segment},
-    matrix::Matrix,
-    qrcode::{Mask, Mode, Version, ECL},
-    render::svg::{render_svg, FinderPattern, RenderOptions},
+    matrix::{Matrix, Module},
+    qrcode::{Mask, Mode, Version, ECL, NUM_DATA_MODULES},
+    render::svg::{render_svg, FinderPattern, SvgOptions},
 };
 
 fn main() -> std::io::Result<()> {
     let data = Data::new(
         vec![Segment {
-            mode: Mode::Alphanumeric,
-            text: "GREETINGS TRAVELER",
+            mode: Mode::Byte,
+            text: "aGREETINGS TRAVELER123456789",
         }],
-        Version(1),
+        Version(2),
     );
     // todo
     // rn codewords takes over data, but could copy to allow change ecl, version
     let codewords = Codewords::new(data, ECL::Low);
-    let matrix = Matrix::new(codewords, Mask(0));
+    let matrix = Matrix::new(codewords, Mask::M0);
     // todo
     // func to change mask
     fs::write(
         "test.svg",
         render_svg(
             &matrix,
-            RenderOptions::new()
+            SvgOptions::new()
                 .finder_pattern(FinderPattern::Cross)
-                .finder_roundness(0.5)
-                .scale(2.0)
-                .foreground("#fff")
-                .background("#111"),
+                .finder_roundness(0.8)
+                .toggle_invert_modules()
+                .foreground("#fff".into())
+                .background("#111".into()),
         ),
     )?;
     // println!("{}", render_utf8(&matrix));

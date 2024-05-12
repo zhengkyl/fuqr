@@ -6,7 +6,7 @@ use crate::{
     data::{Data, Segment},
     matrix::Matrix,
     qrcode::{Mask, Mode, Version, ECL},
-    render::svg::render_svg,
+    render::svg::{render_svg, SvgOptions},
 };
 
 #[cfg(feature = "wasm")]
@@ -15,51 +15,56 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
-pub struct SvgOptions {
+pub struct QrOptions {
     mode: Mode,
-    margin: usize,
-    pixel_size: usize,
     version: Version,
     ecl: ECL,
     mask: Mask,
-    module_shape: usize,
-    finderPattern: usize,
-    alignmentPattern: usize,
 }
 
 #[wasm_bindgen]
-impl SvgOptions {
+impl QrOptions {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-        SvgOptions {
+        QrOptions {
             mode: Mode::Byte,
-            margin: 2,
-            pixel_size: 1,
             version: Version(1),
             ecl: ECL::Low,
-            mask: Mask(0),
-            module_shape: 0,
-            finderPattern: 0,
-            alignmentPattern: 0,
+            mask: Mask::M0,
         }
+    }
+    pub fn mode(mut self, mode: Mode) -> Self {
+        self.mode = mode;
+        self
+    }
+    pub fn version(mut self, version: Version) -> Self {
+        self.version = version;
+        self
+    }
+    pub fn ecl(mut self, ecl: ECL) -> Self {
+        self.ecl = ecl;
+        self
+    }
+    pub fn mask(mut self, mask: Mask) -> Self {
+        self.mask = mask;
+        self
     }
 }
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
-pub fn get_svg(text: &str, options: SvgOptions) -> String {
+pub fn get_svg(text: &str, svg_options: QrOptions, render_options: SvgOptions) -> String {
     // todo, only one segment for now
 
     let data = Data::new(
         vec![Segment {
-            mode: options.mode,
+            mode: svg_options.mode,
             text,
         }],
-        options.version,
+        svg_options.version,
     );
-    let codewords = Codewords::new(data, options.ecl);
-    let matrix = Matrix::new(codewords, options.mask);
+    let codewords = Codewords::new(data, svg_options.ecl);
+    let matrix = Matrix::new(codewords, svg_options.mask);
 
-    // render_svg(&matrix)
-    "".into()
+    render_svg(&matrix, render_options)
 }

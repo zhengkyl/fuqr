@@ -1,7 +1,10 @@
 use crate::{
     data::Data,
-    qrcode::{Mask, Mode, Version, ECL},
+    qrcode::{Mode, Version, ECL},
 };
+
+pub const VERSION_INFO: [usize; 41] = version_info();
+pub const FORMAT_INFO: [[u32; 8]; 4] = format_info();
 
 // input fits in u8 b/c numeric
 pub fn encode_numeric(qrdata: &mut Data, input: &str) {
@@ -64,31 +67,60 @@ pub fn encode_byte(qrdata: &mut Data, input: &str) {
     }
 }
 
-// maybe just hardcode this
-pub fn version_information(version: Version) -> usize {
-    let shifted_version = version.0 << 12;
-    let mut dividend = shifted_version;
+const fn version_info() -> [usize; 41] {
+    let mut array = [0; 41];
 
-    while dividend >= 0b1_0000_0000_0000 {
-        let mut divisor = 0b1_1111_0010_0101;
-        divisor <<= (usize::BITS - dividend.leading_zeros()) - 13; // diff of highest set bit
+    let mut version = 1;
+    while version <= 40 {
+        let shifted_version = version << 12;
+        let mut dividend: usize = shifted_version;
 
-        dividend ^= divisor;
+        while dividend >= 0b1_0000_0000_0000 {
+            let mut divisor = 0b1_1111_0010_0101;
+            divisor <<= (usize::BITS - dividend.leading_zeros()) - 13; // diff of highest set bit
+
+            dividend ^= divisor;
+        }
+        array[version] = shifted_version | dividend;
+        version += 1;
     }
-    shifted_version | dividend
+    array
 }
 
-pub fn format_information(ecl: ECL, mask: Mask) -> u32 {
-    let format = ((((ecl as u8) << 3) | mask.0) as u32) << 10;
-    let mut dividend = format;
+const fn format_info() -> [[u32; 8]; 4] {
+    let mut array = [[0; 8]; 4];
 
-    while dividend >= 0b100_0000_0000 {
-        let mut divisor = 0b101_0011_0111;
-        divisor <<= (32 - dividend.leading_zeros()) - 11;
+    let mut i = 0;
+    let ecls = [ECL::Low, ECL::Medium, ECL::Quartile, ECL::High];
+    while i < 4 {
+        let ecl = ecls[i];
+        let value = match ecl {
+            ECL::Low => 1,
+            ECL::Medium => 0,
+            ECL::Quartile => 3,
+            ECL::High => 2,
+        };
 
-        dividend ^= divisor;
+        let mut mask = 0;
+        while mask < 8 {
+            let format = ((((value) << 3) | mask as u8) as u32) << 10;
+            let mut dividend = format;
+
+            while dividend >= 0b100_0000_0000 {
+                let mut divisor = 0b101_0011_0111;
+                divisor <<= (32 - dividend.leading_zeros()) - 11;
+
+                dividend ^= divisor;
+            }
+
+            array[i][mask] = (format | dividend) ^ 0b10101_0000010010;
+            mask += 1;
+        }
+
+        i += 1;
     }
-    (format | dividend) ^ 0b10101_0000010010
+
+    array
 }
 
 fn bits_char_count_indicator(version: Version, mode: Mode) -> usize {
@@ -131,7 +163,7 @@ fn ascii_to_b45(c: u8) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use crate::data::Segment;
+    use crate::{data::Segment, qrcode::Mask};
 
     use super::*;
     fn get_data_vec(bits: &str) -> Vec<u8> {
@@ -244,15 +276,15 @@ mod tests {
 
     #[test]
     fn information_works() {
-        assert_eq!(version_information(Version::new(7)), 0x07C94);
-        assert_eq!(version_information(Version::new(21)), 0x15683);
-        assert_eq!(version_information(Version::new(40)), 0x28C69);
+        assert_eq!(VERSION_INFO[7], 0x07C94);
+        assert_eq!(VERSION_INFO[21], 0x15683);
+        assert_eq!(VERSION_INFO[40], 0x28C69);
     }
 
     #[test]
     fn format_information_works() {
-        assert_eq!(format_information(ECL::Medium, Mask::new(0)), 0x5412);
-        assert_eq!(format_information(ECL::High, Mask::new(0)), 0x1689);
-        assert_eq!(format_information(ECL::High, Mask::new(7)), 0x083B);
+        assert_eq!(FORMAT_INFO[ECL::Medium as usize][Mask::M0 as usize], 0x5412);
+        assert_eq!(FORMAT_INFO[ECL::High as usize][Mask::M0 as usize], 0x1689);
+        assert_eq!(FORMAT_INFO[ECL::High as usize][Mask::M7 as usize], 0x083B);
     }
 }

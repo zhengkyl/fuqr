@@ -1,11 +1,13 @@
 use crate::{
     codewords::Codewords,
-    encode::{format_information, version_information},
+    encode::{FORMAT_INFO, VERSION_INFO},
     qrcode::{Mask, Version, ECL},
 };
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
 
 // todo, should be possible to set branchless
-// roughly in order of most to least
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum Module {
     DataOFF,
@@ -17,11 +19,11 @@ pub enum Module {
     AlignmentOFF,
     AlignmentON,
 
-    FormatOFF,
-    FormatON,
-
     TimingOFF,
     TimingON,
+
+    FormatOFF,
+    FormatON,
 
     VersionOFF,
     VersionON,
@@ -137,7 +139,7 @@ fn place_finder(matrix: &mut Matrix) {
 }
 
 fn place_format(matrix: &mut Matrix) {
-    let format_info = format_information(matrix.ecl, matrix.mask);
+    let format_info = FORMAT_INFO[matrix.ecl as usize][matrix.mask as usize];
     for i in 0..15 {
         let module = if ((format_info >> i) & 1) == 1 {
             Module::FormatON
@@ -176,7 +178,7 @@ fn place_version(matrix: &mut Matrix) {
     if matrix.version.0 < 7 {
         return;
     }
-    let info = version_information(matrix.version);
+    let info = VERSION_INFO[matrix.version.0];
 
     for i in 0..18 {
         let module = if (info >> i) & 1 == 1 {
@@ -279,16 +281,21 @@ fn place_data(matrix: &mut Matrix, qrcode: &Codewords) {
     ) {
         if matrix.get(col, row) == Module::Unset {
             let mask_bit = match matrix.mask {
-                Mask(0) => (row + col) % 2 == 0,
-                Mask(1) => (row) % 2 == 0,
-                Mask(2) => (col) % 3 == 0,
-                Mask(3) => (row + col) % 3 == 0,
-                Mask(4) => ((row / 2) + (col / 3)) % 2 == 0,
-                Mask(5) => ((row * col) % 2 + (row * col) % 3) == 0,
-                Mask(6) => ((row * col) % 2 + (row * col) % 3) % 2 == 0,
-                Mask(7) => ((row + col) % 2 + (row * col) % 3) % 2 == 0,
-                _ => unreachable!("bad mask"),
+                Mask::M0 => (row + col) % 2 == 0,
+                Mask::M1 => (row) % 2 == 0,
+                Mask::M2 => (col) % 3 == 0,
+                Mask::M3 => (row + col) % 3 == 0,
+                Mask::M4 => ((row / 2) + (col / 3)) % 2 == 0,
+                Mask::M5 => ((row * col) % 2 + (row * col) % 3) == 0,
+                Mask::M6 => ((row * col) % 2 + (row * col) % 3) % 2 == 0,
+                Mask::M7 => ((row + col) % 2 + (row * col) % 3) % 2 == 0,
             } as u8;
+            // FOR FUTURE KYLE
+            // i means ith data bit
+            // qrcode.value[*i / 8] gets current codeword aka byte
+            // 7 - (*i % 8) gets the current bit position in codeword (greatest to least order)
+            // & 1 to check if set and XOR with mask
+            // in c could just use value directly b/c DataOn = 1, DataOFF = 0, but oh well
             let module = if ((qrcode.value[*i / 8] >> (7 - (*i % 8))) & 1) ^ mask_bit == 1 {
                 Module::DataON
             } else {
@@ -311,6 +318,7 @@ fn place_data(matrix: &mut Matrix, qrcode: &Codewords) {
         }
 
         col -= 2;
+        // col 6 is vertical timing belt
         if col == 6 {
             col -= 1;
         }

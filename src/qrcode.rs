@@ -1,3 +1,7 @@
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
+
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 #[derive(PartialEq, Eq)]
 pub enum Mode {
     Numeric,
@@ -10,33 +14,39 @@ pub enum Mode {
     // FNC1,
 }
 
-// values used while encoding format
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum ECL {
-    Low = 1,      // 7
-    Medium = 0,   // 15
-    Quartile = 3, // 25
-    High = 2,     // 30
+    Low,      // 7
+    Medium,   // 15
+    Quartile, // 25
+    High,     // 30
 }
 
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 #[derive(Clone, Copy)]
 pub struct Version(pub usize);
 
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 impl Version {
+    #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
     pub fn new(version: usize) -> Self {
         assert!(version >= 1 && version <= 40);
         Version(version)
     }
 }
 
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 #[derive(Clone, Copy)]
-pub struct Mask(pub u8);
-
-impl Mask {
-    pub fn new(mask: u8) -> Self {
-        assert!(mask < 8);
-        Mask(mask)
-    }
+pub enum Mask {
+    M0,
+    M1,
+    M2,
+    M3,
+    M4,
+    M5,
+    M6,
+    M7,
 }
 
 pub const NUM_DATA_MODULES: [usize; 41] = num_data_modules();

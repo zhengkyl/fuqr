@@ -1,33 +1,12 @@
 # fuqr
 
-a big fu to qr codes
+let's fully understand qr codes
 
-## evidence board
+## todo
 
-- eci (needs investigation)
-
-- mirror and invert should be handled by frontend
-
-- ~~structured append~~
-
-  - not enough decoder supported (eg google lens)
-
-- e + 2t <= d - p
-
-  - _e_ erasure
-  - _t_ error
-  - _d_ correction codewords
-  - _p_ misdecode protection codewords
-
-- avoid 1011101 (finder pattern) as much as possible
-
-- version (< 7) based on dist between finder patterns (reference algo)
-
-- why does Annex A contain generator polynomials for up to 68 error correction codewords?
-
-  - 30 is the max possible, b/c 15 correctable errors per block
-
-- burger king commercial
+- [] multi segment/modes
+- [] calc best mask
+- [] pixel art input? aka qart
 
 ## references
 
