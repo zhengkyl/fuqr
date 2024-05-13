@@ -28,10 +28,12 @@ fn main() -> std::io::Result<()> {
             &matrix,
             SvgOptions::new()
                 .finder_pattern(FinderPattern::Cross)
-                .finder_roundness(0.8)
-                .toggle_invert_modules()
-                .foreground("#fff".into())
-                .background("#111".into()),
+                .finder_roundness(1.0)
+                .toggle_invert()
+                // .toggle_negative()
+                .toggle_background()
+                .foreground("#000".into())
+                .background("#ff0000".into()),
         ),
     )?;
     // println!("{}", render_utf8(&matrix));
