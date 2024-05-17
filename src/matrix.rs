@@ -267,11 +267,6 @@ fn place_alignment(matrix: &mut Matrix) {
 
 // This depends on all placements occuring beforehand
 fn place_data(matrix: &mut Matrix, qrcode: &Codewords) {
-    let mut i = 0;
-
-    let mut col = matrix.width - 1;
-    let mut row = matrix.width - 1;
-
     fn place_module(
         matrix: &mut Matrix,
         qrcode: &Codewords,
@@ -306,6 +301,11 @@ fn place_data(matrix: &mut Matrix, qrcode: &Codewords) {
             matrix.set(col, row, module);
         }
     }
+
+    let mut i = 0;
+
+    let mut col = matrix.width - 1;
+    let mut row = matrix.width - 1;
 
     loop {
         loop {

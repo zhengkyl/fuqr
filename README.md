@@ -16,10 +16,12 @@ https://github.com/erwanvivien/fast_qr
 
 https://github.com/zxing/zxing
 
-https://github.com/antfu/qrcode-toolkit
-
 https://github.com/unjs/uqr
 
-https://web.archive.org/web/20150321031237/http://research.swtch.com/qart
+https://research.swtch.com/qart
 
-https://web.archive.org/web/20150321025905/http://research.swtch.com/field
+https://github.com/mzollin/qr-vanity
+
+https://research.swtch.com/field
+
+https://github.com/antfu/qrcode-toolkit

@@ -5,7 +5,7 @@ use fuqr::{
     data::{Data, Segment},
     matrix::{Matrix, Module},
     qrcode::{Mask, Mode, Version, ECL, NUM_DATA_MODULES},
-    render::svg::{render_svg, FinderPattern, SvgOptions},
+    render::svg::{render_svg, FinderPattern, SvgOptions, Toggle},
 };
 
 fn main() -> std::io::Result<()> {
@@ -29,9 +29,8 @@ fn main() -> std::io::Result<()> {
             SvgOptions::new()
                 .finder_pattern(FinderPattern::Cross)
                 .finder_roundness(1.0)
-                .toggle_invert()
-                // .toggle_negative()
-                .toggle_background()
+                .toggle(Toggle::Invert)
+                .toggle(Toggle::Background)
                 .foreground("#000".into())
                 .background("#ff0000".into()),
         ),
