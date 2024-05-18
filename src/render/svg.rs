@@ -138,7 +138,7 @@ pub fn render_svg(matrix: &Matrix, options: SvgOptions) -> String {
                 if (module_type == Module::FinderOFF)
                 // skip ON modules
                 || (module_type as u8 & 1 == 1)
-                // skip toggled off in render_type
+                // skip toggled off in render_mask
                 || (options.render_mask >> (module_type as u8 / 2)) & 1 == 0
                 {
                     continue;
@@ -183,7 +183,7 @@ pub fn render_svg(matrix: &Matrix, options: SvgOptions) -> String {
             if (module_type == Module::FinderON)
                 // skip OFF modules
                 || (module_type as u8 & 1 == 0)
-                // skip toggled off in render_type
+                // skip toggled off in render_mask
                 || (options.render_mask >> (module_type as u8 / 2)) & 1 == 0
             {
                 continue;

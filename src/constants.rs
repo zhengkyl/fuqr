@@ -3,6 +3,7 @@ use crate::{
     qrcode::ECL,
 };
 
+pub const NUM_DATA_MODULES: [usize; 41] = num_data_modules();
 pub const NUM_EC_CODEWORDS: [[u16; 41]; 4] = num_ec_codewords();
 pub const NUM_BLOCKS: [[u8; 41]; 4] = num_blocks();
 
@@ -10,6 +11,44 @@ pub const NUM_BLOCKS: [[u8; 41]; 4] = num_blocks();
 /// The coefficients are stored as their exponent, starting from the second largest degree.
 /// This EXCLUDES the coefficient of the largest degree, which is a^0.
 pub const GEN_POLYNOMIALS: [[u8; 30]; 31] = gen_polynomials();
+
+pub const VERSION_INFO: [usize; 41] = version_info();
+pub const FORMAT_INFO: [[u32; 8]; 4] = format_info();
+
+const fn num_data_modules() -> [usize; 41] {
+    let mut table = [0; 41];
+
+    let mut version = 1;
+    while version <= 40 {
+        let width = 4 * version + 17;
+        let mut modules = width * width;
+
+        modules -= 64 * 3; // finder markers + separator
+        modules -= 31; // format
+        modules -= 2 * (width - 16); // timing
+
+        let (align, overlap) = match version {
+            1 => (0, 0),
+            x if x <= 6 => (1, 0),
+            x if x <= 13 => (6, 2),
+            x if x <= 20 => (13, 4),
+            x if x <= 27 => (22, 6),
+            x if x <= 34 => (33, 8),
+            x if x <= 40 => (46, 10),
+            _ => unreachable!(),
+        };
+        modules -= align * 25;
+        modules += overlap * 5;
+
+        if version >= 7 {
+            modules -= 36; // 2 version
+        }
+
+        table[version] = modules;
+        version += 1;
+    }
+    table
+}
 
 const fn num_ec_codewords() -> [[u16; 41]; 4] {
     let mut table = [[0; 41]; 4];
@@ -36,7 +75,7 @@ const fn num_ec_codewords() -> [[u16; 41]; 4] {
     table
 }
 
-pub const fn num_blocks() -> [[u8; 41]; 4] {
+const fn num_blocks() -> [[u8; 41]; 4] {
     let mut table = [[0; 41]; 4];
 
     let mut ecl = 0;
@@ -109,4 +148,80 @@ const fn gen_polynomials() -> [[u8; 30]; 31] {
         i += 1;
     }
     table
+}
+
+const fn version_info() -> [usize; 41] {
+    let mut array = [0; 41];
+
+    let mut version = 1;
+    while version <= 40 {
+        let shifted_version = version << 12;
+        let mut dividend: usize = shifted_version;
+
+        while dividend >= 0b1_0000_0000_0000 {
+            let mut divisor = 0b1_1111_0010_0101;
+            divisor <<= (usize::BITS - dividend.leading_zeros()) - 13; // diff of highest set bit
+
+            dividend ^= divisor;
+        }
+        array[version] = shifted_version | dividend;
+        version += 1;
+    }
+    array
+}
+
+const fn format_info() -> [[u32; 8]; 4] {
+    let mut array = [[0; 8]; 4];
+
+    let mut i = 0;
+    let ecls = [ECL::Low, ECL::Medium, ECL::Quartile, ECL::High];
+    while i < 4 {
+        let ecl = ecls[i];
+        let value = match ecl {
+            ECL::Low => 1,
+            ECL::Medium => 0,
+            ECL::Quartile => 3,
+            ECL::High => 2,
+        };
+
+        let mut mask = 0;
+        while mask < 8 {
+            let format = ((((value) << 3) | mask as u8) as u32) << 10;
+            let mut dividend = format;
+
+            while dividend >= 0b100_0000_0000 {
+                let mut divisor = 0b101_0011_0111;
+                divisor <<= (32 - dividend.leading_zeros()) - 11;
+
+                dividend ^= divisor;
+            }
+
+            array[i][mask] = (format | dividend) ^ 0b10101_0000010010;
+            mask += 1;
+        }
+
+        i += 1;
+    }
+
+    array
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::qrcode::Mask;
+
+    #[test]
+    fn information_works() {
+        assert_eq!(VERSION_INFO[7], 0x07C94);
+        assert_eq!(VERSION_INFO[21], 0x15683);
+        assert_eq!(VERSION_INFO[40], 0x28C69);
+    }
+
+    #[test]
+    fn format_information_works() {
+        assert_eq!(FORMAT_INFO[ECL::Medium as usize][Mask::M0 as usize], 0x5412);
+        assert_eq!(FORMAT_INFO[ECL::High as usize][Mask::M0 as usize], 0x1689);
+        assert_eq!(FORMAT_INFO[ECL::High as usize][Mask::M7 as usize], 0x083B);
+    }
 }

@@ -1,10 +1,23 @@
 use crate::{
     data::Data,
-    qrcode::{Mode, Version, ECL},
+    qrcode::{Mode, Version},
 };
 
-pub const VERSION_INFO: [usize; 41] = version_info();
-pub const FORMAT_INFO: [[u32; 8]; 4] = format_info();
+pub fn get_encoding_mode(input: &str) -> Mode {
+    let mut mode = Mode::Numeric;
+    for b in input.bytes() {
+        if b >= b'0' && b <= b'9' {
+            continue;
+        }
+        if byte_to_b45(b) < 45 {
+            mode = Mode::Alphanumeric;
+        } else {
+            mode = Mode::Byte;
+            break;
+        }
+    }
+    mode
+}
 
 // input fits in u8 b/c numeric
 pub fn encode_numeric(qrdata: &mut Data, input: &str) {
@@ -46,12 +59,12 @@ pub fn encode_alphanumeric(qrdata: &mut Data, input: &str) {
 
     for i in 0..(input.len() / 2) {
         let group =
-            ascii_to_b45(input[i * 2]) as usize * 45 + ascii_to_b45(input[i * 2 + 1]) as usize;
+            byte_to_b45(input[i * 2]) as usize * 45 + byte_to_b45(input[i * 2 + 1]) as usize;
         qrdata.push_bits(group, 11);
     }
 
     if (input.len() & 1) == 1 {
-        qrdata.push_bits(ascii_to_b45(input[input.len() - 1]).into(), 6);
+        qrdata.push_bits(byte_to_b45(input[input.len() - 1]).into(), 6);
     }
 }
 
@@ -67,63 +80,7 @@ pub fn encode_byte(qrdata: &mut Data, input: &str) {
     }
 }
 
-const fn version_info() -> [usize; 41] {
-    let mut array = [0; 41];
-
-    let mut version = 1;
-    while version <= 40 {
-        let shifted_version = version << 12;
-        let mut dividend: usize = shifted_version;
-
-        while dividend >= 0b1_0000_0000_0000 {
-            let mut divisor = 0b1_1111_0010_0101;
-            divisor <<= (usize::BITS - dividend.leading_zeros()) - 13; // diff of highest set bit
-
-            dividend ^= divisor;
-        }
-        array[version] = shifted_version | dividend;
-        version += 1;
-    }
-    array
-}
-
-const fn format_info() -> [[u32; 8]; 4] {
-    let mut array = [[0; 8]; 4];
-
-    let mut i = 0;
-    let ecls = [ECL::Low, ECL::Medium, ECL::Quartile, ECL::High];
-    while i < 4 {
-        let ecl = ecls[i];
-        let value = match ecl {
-            ECL::Low => 1,
-            ECL::Medium => 0,
-            ECL::Quartile => 3,
-            ECL::High => 2,
-        };
-
-        let mut mask = 0;
-        while mask < 8 {
-            let format = ((((value) << 3) | mask as u8) as u32) << 10;
-            let mut dividend = format;
-
-            while dividend >= 0b100_0000_0000 {
-                let mut divisor = 0b101_0011_0111;
-                divisor <<= (32 - dividend.leading_zeros()) - 11;
-
-                dividend ^= divisor;
-            }
-
-            array[i][mask] = (format | dividend) ^ 0b10101_0000010010;
-            mask += 1;
-        }
-
-        i += 1;
-    }
-
-    array
-}
-
-fn bits_char_count_indicator(version: Version, mode: Mode) -> usize {
+pub fn bits_char_count_indicator(version: Version, mode: Mode) -> usize {
     if mode == Mode::Byte {
         return if version.0 < 10 { 8 } else { 16 };
     }
@@ -144,11 +101,11 @@ fn bits_char_count_indicator(version: Version, mode: Mode) -> usize {
     base
 }
 
-fn ascii_to_b45(c: u8) -> u8 {
+fn byte_to_b45(c: u8) -> u8 {
     match c {
-        x if x >= b'A' => x - b'A' + 10,
+        x if x >= b'A' && x <= b'Z' => x - b'A' + 10,
         b':' => 44,
-        x if x >= b'0' => x - b'0',
+        x if x >= b'0' && x <= b'9' => x - b'0',
         b' ' => 36,
         b'$' => 37,
         b'%' => 38,
@@ -157,13 +114,16 @@ fn ascii_to_b45(c: u8) -> u8 {
         b'-' => 41,
         b'.' => 42,
         b'/' => 43,
-        _ => unreachable!("Not b45 encodable"),
+        // All other values are invalid
+        // can use byte_to_b45 < 45 if validation needed
+        _ => 255,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{data::Segment, qrcode::Mask};
+    use crate::data::Segment;
+    use crate::qrcode::ECL;
 
     use super::*;
     fn get_data_vec(bits: &str) -> Vec<u8> {
@@ -202,7 +162,9 @@ mod tests {
                 text: "1",
             }],
             Version(1),
-        );
+            ECL::Low,
+        )
+        .unwrap();
 
         assert_eq!(data.value, get_data_vec("0001 0000000001 0001"));
 
@@ -212,7 +174,9 @@ mod tests {
                 text: "99",
             }],
             Version(1),
-        );
+            ECL::Low,
+        )
+        .unwrap();
         assert_eq!(data.value, get_data_vec("0001 0000000010 1100011"));
 
         let data = Data::new(
@@ -221,7 +185,9 @@ mod tests {
                 text: "123456",
             }],
             Version(1),
-        );
+            ECL::Low,
+        )
+        .unwrap();
         assert_eq!(
             data.value,
             get_data_vec("0001 0000000110 0001111011 0111001000")
@@ -236,7 +202,9 @@ mod tests {
                 text: "1",
             }],
             Version(1),
-        );
+            ECL::Low,
+        )
+        .unwrap();
         assert_eq!(data.value, get_data_vec("0010 000000001 000001"));
 
         let data = Data::new(
@@ -245,7 +213,9 @@ mod tests {
                 text: "99",
             }],
             Version(1),
-        );
+            ECL::Low,
+        )
+        .unwrap();
         assert_eq!(data.value, get_data_vec("0010 000000010 00110011110"));
 
         let data = Data::new(
@@ -254,7 +224,9 @@ mod tests {
                 text: "ABC1::4",
             }],
             Version(1),
-        );
+            ECL::Low,
+        )
+        .unwrap();
         assert_eq!(
             data.value,
             get_data_vec("0010 000000111 00111001101 01000011101 11111101000 000100")
@@ -269,22 +241,10 @@ mod tests {
                 text: "0",
             }],
             Version(1),
-        );
+            ECL::Low,
+        )
+        .unwrap();
 
         assert_eq!(data.value, get_data_vec("0100 00000001 00110000"));
-    }
-
-    #[test]
-    fn information_works() {
-        assert_eq!(VERSION_INFO[7], 0x07C94);
-        assert_eq!(VERSION_INFO[21], 0x15683);
-        assert_eq!(VERSION_INFO[40], 0x28C69);
-    }
-
-    #[test]
-    fn format_information_works() {
-        assert_eq!(FORMAT_INFO[ECL::Medium as usize][Mask::M0 as usize], 0x5412);
-        assert_eq!(FORMAT_INFO[ECL::High as usize][Mask::M0 as usize], 0x1689);
-        assert_eq!(FORMAT_INFO[ECL::High as usize][Mask::M7 as usize], 0x083B);
     }
 }

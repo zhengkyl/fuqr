@@ -1,8 +1,8 @@
 use crate::{
+    constants::{GEN_POLYNOMIALS, NUM_BLOCKS, NUM_DATA_MODULES, NUM_EC_CODEWORDS},
     data::Data,
-    error_correction::{GEN_POLYNOMIALS, NUM_BLOCKS, NUM_EC_CODEWORDS},
     math::{ANTILOG_TABLE, LOG_TABLE},
-    qrcode::{Version, ECL, NUM_DATA_MODULES},
+    qrcode::{Version, ECL},
 };
 
 pub struct Codewords {
@@ -12,21 +12,21 @@ pub struct Codewords {
 }
 
 impl Codewords {
-    pub fn new(data: Data, ecl: ECL) -> Self {
+    pub fn new(data: Data) -> Self {
         Codewords {
             version: data.version,
-            value: calc_ecc_and_sequence(data, ecl),
-            ecl,
+            ecl: data.ecl,
+            value: calc_ecc_and_sequence(data),
         }
     }
 }
 
-fn calc_ecc_and_sequence(mut qrdata: Data, ecl: ECL) -> Vec<u8> {
+fn calc_ecc_and_sequence(mut qrdata: Data) -> Vec<u8> {
     let modules = NUM_DATA_MODULES[qrdata.version.0];
     let codewords = modules / 8;
     let remainder_bits = modules % 8;
 
-    let num_ec_codewords = NUM_EC_CODEWORDS[ecl as usize][qrdata.version.0] as usize;
+    let num_ec_codewords = NUM_EC_CODEWORDS[qrdata.ecl as usize][qrdata.version.0] as usize;
     let num_data_codewords = codewords - num_ec_codewords;
 
     // terminator
@@ -50,7 +50,7 @@ fn calc_ecc_and_sequence(mut qrdata: Data, ecl: ECL) -> Vec<u8> {
         alternating_byte ^= 0b11111101;
     }
 
-    let blocks = NUM_BLOCKS[ecl as usize][qrdata.version.0] as usize;
+    let blocks = NUM_BLOCKS[qrdata.ecl as usize][qrdata.version.0] as usize;
 
     let group_2_blocks = codewords % blocks;
     let group_1_blocks = blocks - group_2_blocks;

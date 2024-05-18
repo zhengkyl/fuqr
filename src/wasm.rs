@@ -4,6 +4,7 @@ use wasm_bindgen::prelude::*;
 use crate::{
     codewords::Codewords,
     data::{Data, Segment},
+    encode::get_encoding_mode,
     matrix::Matrix,
     qrcode::{Mask, Mode, Version, ECL},
     render::svg::{render_svg, SvgOptions},
@@ -53,18 +54,22 @@ impl QrOptions {
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
-pub fn get_svg(text: &str, svg_options: QrOptions, render_options: SvgOptions) -> String {
-    // todo, only one segment for now
+pub fn get_svg(input: &str, svg_options: QrOptions, render_options: SvgOptions) -> Option<String> {
+    let mode = get_encoding_mode(input);
 
     let data = Data::new(
-        vec![Segment {
-            mode: svg_options.mode,
-            text,
-        }],
+        vec![Segment { mode, text: input }],
         svg_options.version,
+        svg_options.ecl,
     );
-    let codewords = Codewords::new(data, svg_options.ecl);
+
+    let data = match data {
+        Some(x) => x,
+        None => return None,
+    };
+
+    let codewords = Codewords::new(data);
     let matrix = Matrix::new(codewords, svg_options.mask);
 
-    render_svg(&matrix, render_options)
+    Some(render_svg(&matrix, render_options))
 }

@@ -1,6 +1,6 @@
 use crate::{
     codewords::Codewords,
-    encode::{FORMAT_INFO, VERSION_INFO},
+    constants::{FORMAT_INFO, VERSION_INFO},
     qrcode::{Mask, Version, ECL},
 };
 #[cfg(feature = "wasm")]
