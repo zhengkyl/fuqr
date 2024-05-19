@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["wasm"]
+default = ["wasm", "text"]
 wasm = ["dep:wasm-bindgen", "dep:wee_alloc"]
 text = []
 

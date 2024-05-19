@@ -12,46 +12,14 @@ pub struct Data {
 }
 
 impl Data {
-    pub fn new(segments: Vec<Segment>, version: Version, ecl: ECL) -> Option<Self> {
-        let data = Data::strict_new(segments, version, ecl);
-
-        let data = match data {
-            Ok(x) => x,
-            Err((segments, min_version)) if min_version <= 40 => {
-                let ec_codewords = NUM_EC_CODEWORDS[ecl as usize];
-                let data_codewords =
-                    (NUM_DATA_MODULES[version.0] / 8) - ec_codewords[version.0] as usize;
-                let mut data = Data {
-                    value: Vec::with_capacity(data_codewords),
-                    bit_len: 0,
-                    version,
-                    ecl,
-                };
-                encode(&mut data, segments);
-                data
-            }
-            Err(_) => return None,
-        };
-
-        Some(data)
-    }
-
-    pub fn strict_new(
-        segments: Vec<Segment>,
-        version: Version,
-        ecl: ECL,
-    ) -> Result<Self, (Vec<Segment>, usize)> {
-        let ec_codewords = NUM_EC_CODEWORDS[ecl as usize];
-        let data_codewords = (NUM_DATA_MODULES[version.0] / 8) - ec_codewords[version.0] as usize;
-
+    pub fn new(segments: Vec<Segment>, min_version: Version, min_ecl: ECL) -> Option<Self> {
         let mut bits = 0;
         for segment in &segments {
-            bits += 4 + bits_char_count_indicator(version, segment.mode);
+            bits += 4 + bits_char_count_indicator(min_version, segment.mode);
             let char_len = segment.text.len();
             match segment.mode {
                 Mode::Numeric => {
                     bits += (char_len / 3) * 10;
-                    // (char_len % 3) * 3 + 1 * (char_len % 3 + 1) / 2
                     match char_len % 3 {
                         2 => bits += 7,
                         1 => bits += 4,
@@ -67,41 +35,59 @@ impl Data {
             }
         }
 
-        if ((bits + 7) / 8) > data_codewords {
-            let mut version = version.0 + 1;
-            while version <= 40 {
-                let codewords = (NUM_DATA_MODULES[version] / 8) - ec_codewords[version] as usize;
-                for segment in &segments {
-                    match segment.mode {
-                        Mode::Byte => {
-                            if version == 10 {
-                                bits += 8;
-                            }
+        let ec_codewords = NUM_EC_CODEWORDS[min_version.0];
+        let mut data_codewords = (NUM_DATA_MODULES[min_version.0] / 8) as usize;
+
+        let mut min_version = min_version.0;
+        let mut req_codewords = (bits + 7) / 8;
+
+        while req_codewords > (data_codewords - ec_codewords[min_ecl as usize] as usize)
+            && min_version < 40
+        {
+            min_version += 1;
+
+            data_codewords = (NUM_DATA_MODULES[min_version] / 8) as usize;
+            for segment in &segments {
+                // char count indicator length increase
+                match segment.mode {
+                    Mode::Byte => {
+                        if min_version == 10 {
+                            bits += 8;
                         }
-                        _ => {
-                            if version == 10 || version == 27 {
-                                bits += 2;
-                            }
+                    }
+                    _ => {
+                        if min_version == 10 || min_version == 27 {
+                            bits += 2;
                         }
                     }
                 }
-                if (bits + 7) / 8 <= codewords {
-                    break;
-                }
-                version += 1;
             }
+            req_codewords = (bits + 7) / 8;
+        }
 
-            return Err((segments, version));
+        if min_version > 40 {
+            return None;
+        }
+
+        let mut max_ecl = min_ecl;
+
+        // this is literally to avoid having to impl TryFrom<usize> for ECL
+        let ecls = [ECL::Low, ECL::Medium, ECL::Quartile, ECL::High];
+        for new_ecl in (min_ecl as usize + 1..ecls.len()).rev() {
+            if req_codewords <= data_codewords - ec_codewords[new_ecl] as usize {
+                max_ecl = ecls[new_ecl];
+                break;
+            }
         }
 
         let mut data = Data {
             value: Vec::with_capacity(data_codewords),
             bit_len: 0,
-            version,
-            ecl,
+            version: Version(min_version),
+            ecl: max_ecl,
         };
         encode(&mut data, segments);
-        Ok(data)
+        Some(data)
     }
 
     pub fn push_bits(&mut self, input: usize, len: usize) {

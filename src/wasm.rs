@@ -53,8 +53,23 @@ impl QrOptions {
 }
 
 #[cfg(feature = "wasm")]
+#[wasm_bindgen(getter_with_clone)]
+pub struct SvgResult {
+    pub svg: String,
+    // These may not match input, so return final values
+    pub mode: Mode,
+    pub ecl: ECL,
+    pub version: Version,
+    pub mask: Mask,
+}
+
+#[cfg(feature = "wasm")]
 #[wasm_bindgen]
-pub fn get_svg(input: &str, svg_options: QrOptions, render_options: SvgOptions) -> Option<String> {
+pub fn get_svg(
+    input: &str,
+    svg_options: QrOptions,
+    render_options: SvgOptions,
+) -> Option<SvgResult> {
     let mode = get_encoding_mode(input);
 
     let data = Data::new(
@@ -69,7 +84,13 @@ pub fn get_svg(input: &str, svg_options: QrOptions, render_options: SvgOptions) 
     };
 
     let codewords = Codewords::new(data);
-    let matrix = Matrix::new(codewords, svg_options.mask);
+    let matrix = Matrix::new(codewords, Some(svg_options.mask));
 
-    Some(render_svg(&matrix, render_options))
+    Some(SvgResult {
+        svg: render_svg(&matrix, render_options),
+        mode,
+        ecl: matrix.ecl,
+        version: matrix.version,
+        mask: matrix.mask,
+    })
 }
