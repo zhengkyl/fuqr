@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
-pub struct SvgOptions {
+pub struct SvgBuilder {
     margin: f64,
     unit: f64,
     fg_module_size: f64,
@@ -15,9 +15,9 @@ pub struct SvgOptions {
     finder_roundness: f64,
     foreground: String,
     background: String,
-    render_mask: u8,    // bits represent module types to render
-    scale_mask: u8,     // bits represent module types to scale
-    toggle_options: u8, // background, invert, finder fg, finder bg, // fillrule ?
+    render_mask: u8, // bits represent module types to render
+    scale_mask: u8,  // bits represent module types to scale
+    toggle_options: u8,
 }
 
 #[cfg(feature = "wasm")]
@@ -30,10 +30,10 @@ pub enum Toggle {
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
-impl SvgOptions {
+impl SvgBuilder {
     #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
     pub fn new() -> Self {
-        SvgOptions {
+        SvgBuilder {
             margin: 2.0,
             unit: 1.0,
             fg_module_size: 1.0,
@@ -71,19 +71,19 @@ impl SvgOptions {
         self.finder_roundness = finder_roundness;
         self
     }
-    pub fn foreground(mut self, foreground: String) -> SvgOptions {
+    pub fn foreground(mut self, foreground: String) -> SvgBuilder {
         self.foreground = foreground;
         self
     }
-    pub fn background(mut self, background: String) -> SvgOptions {
+    pub fn background(mut self, background: String) -> SvgBuilder {
         self.background = background;
         self
     }
-    pub fn toggle_render(mut self, module: Module) -> SvgOptions {
+    pub fn toggle_render(mut self, module: Module) -> SvgBuilder {
         self.render_mask ^= 1 << (module as u8 / 2);
         self
     }
-    pub fn toggle_scale(mut self, module: Module) -> SvgOptions {
+    pub fn toggle_scale(mut self, module: Module) -> SvgBuilder {
         self.scale_mask ^= 1 << (module as u8 / 2);
         self
     }
@@ -94,7 +94,7 @@ impl SvgOptions {
         (self.scale_mask >> (module as u8 / 2)) & 1 == 1
     }
 
-    pub fn toggle(mut self, toggle: Toggle) -> SvgOptions {
+    pub fn toggle(mut self, toggle: Toggle) -> SvgBuilder {
         self.toggle_options ^= 1 << toggle as u8;
         self
     }
@@ -103,14 +103,7 @@ impl SvgOptions {
     }
 }
 
-#[derive(Clone, Copy)]
-#[cfg_attr(feature = "wasm", wasm_bindgen)]
-pub enum FinderPattern {
-    Square,
-    Cross,
-}
-
-pub fn render_svg(matrix: &Matrix, options: SvgOptions) -> String {
+pub fn render_svg(matrix: &Matrix, options: SvgBuilder) -> String {
     let full_width = matrix.width as f64 * options.unit + (2.0 * options.margin);
 
     // todo better initial capacity
@@ -164,17 +157,6 @@ pub fn render_svg(matrix: &Matrix, options: SvgOptions) -> String {
 
     result.push_str(&format!("<path fill=\"{}\" d=\"", options.foreground));
 
-    // render inverted, wrap everything in counterclockwise path
-    if options.get(Toggle::Invert) {
-        result.push_str("M0,0v");
-        result.push_str(&full_width.to_string());
-        result.push_str("h");
-        result.push_str(&full_width.to_string());
-        result.push_str("v-");
-        result.push_str(&full_width.to_string());
-        result.push_str("z");
-    }
-
     for x in 0..matrix.width {
         for y in 0..matrix.width {
             let module_type = matrix.get(x, y);
@@ -215,7 +197,7 @@ pub fn render_svg(matrix: &Matrix, options: SvgOptions) -> String {
     result
 }
 
-fn render_finder(matrix: &Matrix, options: &SvgOptions, result: &mut String) {
+fn render_finder(matrix: &Matrix, options: &SvgBuilder, result: &mut String) {
     let full_width = matrix.width as f64 * options.unit + (2.0 * options.margin);
     let finder_offset = full_width - 7.0 * options.unit - options.margin;
 
@@ -324,6 +306,13 @@ fn render_finder(matrix: &Matrix, options: &SvgOptions, result: &mut String) {
         }
         result.push_str("\"/>");
     }
+}
+
+#[derive(Clone, Copy)]
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub enum FinderPattern {
+    Square,
+    Cross,
 }
 
 // https://pomax.github.io/bezierinfo/#arcapproximation

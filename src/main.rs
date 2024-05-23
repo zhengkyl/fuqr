@@ -1,13 +1,12 @@
 use std::fs;
 
 use fuqr::{
-    codewords::Codewords,
     constants::NUM_EC_CODEWORDS,
     data::{Data, Segment},
     matrix::{Matrix, Module},
     qrcode::{Mask, Mode, Version, ECL},
     render::{
-        svg::{render_svg, FinderPattern, SvgOptions, Toggle},
+        svg::{render_svg, FinderPattern, Toggle},
         text::render_utf8,
     },
 };
@@ -38,8 +37,7 @@ fn main() -> std::io::Result<()> {
     };
     // todo
     // rn codewords takes over data, but could copy to allow change ecl, version
-    let codewords = Codewords::new(data);
-    let matrix = Matrix::new(codewords, None);
+    let matrix = Matrix::new(data, None);
     // todo
     // func to change mask
     // fs::write(

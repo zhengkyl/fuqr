@@ -1,8 +1,8 @@
-use std::mem::swap;
-
 use crate::{
-    codewords::Codewords,
     constants::{FORMAT_INFO, VERSION_INFO},
+    data::Data,
+    error_correction::ecc_and_sequence,
+    mask::score,
     qrcode::{Mask, Version, ECL},
 };
 #[cfg(feature = "wasm")]
@@ -43,20 +43,21 @@ pub struct Matrix {
 }
 
 impl Matrix {
-    pub fn new(codewords: Codewords, mask: Option<Mask>) -> Self {
-        let width = codewords.version.0 * 4 + 17;
+    pub fn new(data: Data, mask: Option<Mask>) -> Self {
+        let width = data.version.0 * 4 + 17;
         let mut matrix = Matrix {
             width,
             value: vec![Module::Unset; width * width],
-            version: codewords.version,
-            ecl: codewords.ecl,
+            version: data.version,
+            ecl: data.ecl,
             mask: if let Some(mask) = mask {
                 mask
             } else {
                 Mask::M0
             },
         };
-        place_all(&mut matrix, &codewords);
+
+        place_all(&mut matrix, ecc_and_sequence(data));
 
         if let None = mask {
             let mut min_score = score(&matrix);
@@ -107,13 +108,13 @@ impl Matrix {
     }
 }
 
-fn place_all(matrix: &mut Matrix, codewords: &Codewords) {
+fn place_all(matrix: &mut Matrix, data: Vec<u8>) {
     place_finder(matrix);
     place_format(matrix);
     place_timing(matrix);
     place_version(matrix);
     place_alignment(matrix);
-    place_data(matrix, codewords);
+    place_data(matrix, data);
     apply_mask(matrix);
 }
 
@@ -308,14 +309,8 @@ fn place_alignment(matrix: &mut Matrix) {
 }
 
 // This depends on all placements occuring beforehand
-fn place_data(matrix: &mut Matrix, qrcode: &Codewords) {
-    fn place_module(
-        matrix: &mut Matrix,
-        qrcode: &Codewords,
-        col: usize,
-        row: usize,
-        i: &mut usize,
-    ) {
+fn place_data(matrix: &mut Matrix, data: Vec<u8>) {
+    fn place_module(matrix: &mut Matrix, data: &Vec<u8>, col: usize, row: usize, i: &mut usize) {
         if matrix.get(col, row) == Module::Unset {
             // FOR FUTURE KYLE
             // i means ith data bit
@@ -323,7 +318,7 @@ fn place_data(matrix: &mut Matrix, qrcode: &Codewords) {
             // 7 - (*i % 8) gets the current bit position in codeword (greatest to least order)
             // & 1 to check if set and XOR with mask
             // in c could just use value directly b/c DataOn = 1, DataOFF = 0, but oh well
-            let module = if ((qrcode.value[*i / 8] >> (7 - (*i % 8))) & 1) == 1 {
+            let module = if ((data[*i / 8] >> (7 - (*i % 8))) & 1) == 1 {
                 Module::DataON
             } else {
                 Module::DataOFF
@@ -341,8 +336,8 @@ fn place_data(matrix: &mut Matrix, qrcode: &Codewords) {
 
     loop {
         loop {
-            place_module(matrix, qrcode, col, row, &mut i);
-            place_module(matrix, qrcode, col - 1, row, &mut i);
+            place_module(matrix, &data, col, row, &mut i);
+            place_module(matrix, &data, col - 1, row, &mut i);
             if row == 0 {
                 break;
             }
@@ -356,8 +351,8 @@ fn place_data(matrix: &mut Matrix, qrcode: &Codewords) {
         }
 
         loop {
-            place_module(matrix, qrcode, col, row, &mut i);
-            place_module(matrix, qrcode, col - 1, row, &mut i);
+            place_module(matrix, &data, col, row, &mut i);
+            place_module(matrix, &data, col - 1, row, &mut i);
             if row == matrix.width - 1 {
                 break;
             }
@@ -393,7 +388,8 @@ fn apply_mask(matrix: &mut Matrix) {
             matrix.set(
                 i,
                 j,
-                if module ^ mask_bit(i, j) as u8 == 1 {
+                // TODO NOTE THAT ROW=j COL=i
+                if module ^ mask_bit(j, i) as u8 == 1 {
                     Module::DataON
                 } else {
                     Module::DataOFF
@@ -401,104 +397,4 @@ fn apply_mask(matrix: &mut Matrix) {
             );
         }
     }
-}
-
-// todo UNTESTED CODE: HERE BE DRAGONS
-// if score is wrong for all masks, then this still works
-fn score(matrix: &Matrix) -> usize {
-    // todo are cache misses even a concern? vec is small
-
-    fn dark_proportion(matrix: &Matrix) -> usize {
-        let dark = matrix
-            .value
-            .iter()
-            .filter(|m| **m == Module::DataON)
-            .count();
-
-        let mut percent = (dark * 20) / (20 * matrix.width * matrix.width);
-        let mut middle = 50;
-        if percent < middle {
-            swap(&mut percent, &mut middle);
-        }
-        let k = (percent - middle) / 5;
-        10 * k
-    }
-
-    fn blocks(matrix: &Matrix) -> usize {
-        let mut score = 0;
-        for i in 0..matrix.width - 1 {
-            for j in 0..matrix.width - 1 {
-                let curr = matrix.get(i, j) as u8 & 1;
-                let tr = matrix.get(i + 1, j) as u8 & 1;
-                let bl = matrix.get(i, j + 1) as u8 & 1;
-                let br = matrix.get(i + 1, j + 1) as u8 & 1;
-                if curr == tr && curr == bl && curr == br {
-                    score += 3;
-                }
-            }
-        }
-        score
-    }
-
-    // detects streaks >= 5 and finder patterns
-    fn line_patterns(matrix: &Matrix, col: bool) -> usize {
-        let mut score = 0;
-        let (i_mult, j_mult) = match col {
-            true => (matrix.width, 1),
-            false => (1, matrix.width),
-        };
-
-        let pattern_1 = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1];
-        let pattern_2 = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
-
-        for i in 0..matrix.width {
-            let mut streak = 1;
-            let mut streak_v = matrix.value[i * i_mult + 0] as u8 & 1;
-
-            let mut finder_i = if streak_v == pattern_1[0] { 1 } else { 0 };
-            let mut finder_j = if streak_v == pattern_2[0] { 1 } else { 0 };
-
-            for j in 1..matrix.width {
-                let curr = matrix.value[i * i_mult + j * j_mult] as u8 & 1;
-
-                if curr == streak_v {
-                    streak += 1;
-                    if streak == 5 {
-                        score += 3;
-                    } else if streak > 5 {
-                        score += 1;
-                    }
-                } else {
-                    streak = 0;
-                    streak_v = curr;
-                }
-
-                if curr == pattern_1[finder_i] {
-                    finder_i += 1;
-                    if finder_i == pattern_1.len() {
-                        score += 40;
-                        finder_i = 0;
-                    }
-                } else {
-                    finder_i = 0;
-                }
-                if curr == pattern_2[finder_j] {
-                    finder_j += 1;
-                    if finder_j == pattern_2.len() {
-                        score += 40;
-                        finder_j = 0;
-                    }
-                } else {
-                    finder_j = 0;
-                }
-            }
-        }
-
-        score
-    }
-
-    dark_proportion(matrix)
-        + blocks(matrix)
-        + line_patterns(matrix, true)
-        + line_patterns(matrix, false)
 }

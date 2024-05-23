@@ -2,26 +2,9 @@ use crate::{
     constants::{GEN_POLYNOMIALS, NUM_BLOCKS, NUM_DATA_MODULES, NUM_EC_CODEWORDS},
     data::Data,
     math::{ANTILOG_TABLE, LOG_TABLE},
-    qrcode::{Version, ECL},
 };
 
-pub struct Codewords {
-    pub value: Vec<u8>,
-    pub version: Version,
-    pub ecl: ECL,
-}
-
-impl Codewords {
-    pub fn new(data: Data) -> Self {
-        Codewords {
-            version: data.version,
-            ecl: data.ecl,
-            value: calc_ecc_and_sequence(data),
-        }
-    }
-}
-
-fn calc_ecc_and_sequence(mut qrdata: Data) -> Vec<u8> {
+pub fn ecc_and_sequence(mut qrdata: Data) -> Vec<u8> {
     let modules = NUM_DATA_MODULES[qrdata.version.0] as usize;
     let codewords = modules / 8;
     let remainder_bits = modules % 8;

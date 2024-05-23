@@ -4,15 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["wasm", "text"]
+default = ["wasm", "text", "console_error_panic_hook"]
 wasm = ["dep:wasm-bindgen", "dep:wee_alloc"]
+console_error_panic_hook = ["dep:console_error_panic_hook"]
 text = []
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-# [target.'cfg(target_arch = "wasm32")'.dependencies]
 [dependencies]
+console_error_panic_hook = { version = "0.1.7", optional = true }
 wasm-bindgen = { version = "0.2.92", optional = true }
 wee_alloc = { version = "0.4.5", optional = true }
 

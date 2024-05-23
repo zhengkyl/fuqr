@@ -1,6 +1,6 @@
 use crate::{
     constants::{NUM_DATA_MODULES, NUM_EC_CODEWORDS},
-    encode::{bits_char_count_indicator, encode_alphanumeric, encode_byte, encode_numeric},
+    encoding::{bits_char_count_indicator, encode_alphanumeric, encode_byte, encode_numeric},
     qrcode::{Mode, Version, ECL},
 };
 
@@ -9,6 +9,11 @@ pub struct Data {
     pub bit_len: usize,
     pub version: Version,
     pub ecl: ECL,
+}
+
+pub struct Segment<'a> {
+    pub mode: Mode,
+    pub text: &'a str,
 }
 
 impl Data {
@@ -35,13 +40,13 @@ impl Data {
             }
         }
 
-        let ec_codewords = NUM_EC_CODEWORDS[min_version.0];
         let mut data_codewords = (NUM_DATA_MODULES[min_version.0] / 8) as usize;
 
         let mut min_version = min_version.0;
         let mut req_codewords = (bits + 7) / 8;
 
-        while req_codewords > (data_codewords - ec_codewords[min_ecl as usize] as usize)
+        while req_codewords
+            > (data_codewords - NUM_EC_CODEWORDS[min_version][min_ecl as usize] as usize)
             && min_version < 40
         {
             min_version += 1;
@@ -74,7 +79,7 @@ impl Data {
         // this is literally to avoid having to impl TryFrom<usize> for ECL
         let ecls = [ECL::Low, ECL::Medium, ECL::Quartile, ECL::High];
         for new_ecl in (min_ecl as usize + 1..ecls.len()).rev() {
-            if req_codewords <= data_codewords - ec_codewords[new_ecl] as usize {
+            if req_codewords <= data_codewords - NUM_EC_CODEWORDS[min_version][new_ecl] as usize {
                 max_ecl = ecls[new_ecl];
                 break;
             }
@@ -115,11 +120,6 @@ impl Data {
             self.value.push((input << (8 - len)) as u8);
         }
     }
-}
-
-pub struct Segment<'a> {
-    pub mode: Mode,
-    pub text: &'a str, // max length is 7089 numeric, v40, low
 }
 
 fn encode(data: &mut Data, segments: Vec<Segment>) {
