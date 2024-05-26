@@ -17,6 +17,7 @@ pub struct SvgBuilder {
     background: String,
     render_mask: u8, // bits represent module types to render
     scale_mask: u8,  // bits represent module types to scale
+    scale_matrix: Vec<f64>,
     toggle_options: u8,
 }
 
@@ -44,6 +45,7 @@ impl SvgBuilder {
             background: "#fff".into(),
             render_mask: 0b0011_1111,
             scale_mask: 0b0011_1111,
+            scale_matrix: Vec::new(),
             toggle_options: 0b0000_0101,
         }
     }

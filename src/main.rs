@@ -16,16 +16,16 @@ fn main() -> std::io::Result<()> {
         vec![
             Segment {
                 mode: Mode::Byte,
-                text: "你好",
+                text: "Greetings traveler",
             },
-            Segment {
-                mode: Mode::Byte,
-                text: "你好",
-            },
-            Segment {
-                mode: Mode::Byte,
-                text: "你好",
-            },
+            // Segment {
+            //     mode: Mode::Byte,
+            //     text: "你好",
+            // },
+            // Segment {
+            //     mode: Mode::Byte,
+            //     text: "你好",
+            // },
         ],
         Version(4),
         ECL::Low,

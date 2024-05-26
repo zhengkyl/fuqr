@@ -1,3 +1,5 @@
+use std::ops::BitOr;
+
 use crate::{
     constants::{FORMAT_INFO, VERSION_INFO},
     data::Data,
@@ -30,8 +32,14 @@ pub enum Module {
     VersionOFF,
     VersionON,
 
-    Separator,
     Unset,
+}
+
+impl BitOr<u8> for Module {
+    type Output = Module;
+    fn bitor(self, rhs: u8) -> Self::Output {
+        unsafe { std::mem::transmute(self as u8 | rhs) }
+    }
 }
 
 pub struct Matrix {
@@ -76,7 +84,9 @@ impl Matrix {
 
                 matrix.mask = m;
                 apply_mask(&mut matrix);
-                place_format(&mut matrix);
+                iterate_format(&mut matrix, |matrix, col, row, on| {
+                    matrix.set(col, row, Module::FormatOFF | on as u8)
+                });
                 let score = score(&matrix);
                 if score < min_score {
                     min_score = score;
@@ -90,7 +100,9 @@ impl Matrix {
                 matrix.mask = min_mask;
                 apply_mask(&mut matrix);
 
-                place_format(&mut matrix);
+                iterate_format(&mut matrix, |matrix, col, row, on| {
+                    matrix.set(col, row, Module::FormatOFF | on as u8)
+                });
             }
         }
 
@@ -109,86 +121,99 @@ impl Matrix {
 }
 
 fn place_all(matrix: &mut Matrix, data: Vec<u8>) {
-    place_finder(matrix);
-    place_format(matrix);
-    place_timing(matrix);
-    place_version(matrix);
-    place_alignment(matrix);
-    place_data(matrix, data);
+    iterate_finder(matrix, |matrix, col, row, on| {
+        matrix.set(col, row, Module::FinderOFF | on as u8)
+    });
+    iterate_format(matrix, |matrix, col, row, on| {
+        matrix.set(col, row, Module::FormatOFF | on as u8)
+    });
+    iterate_timing(matrix, |matrix, col, row, on| {
+        matrix.set(col, row, Module::TimingOFF | on as u8)
+    });
+    iterate_version(matrix, |matrix, col, row, on| {
+        matrix.set(col, row, Module::VersionOFF | on as u8)
+    });
+    iterate_alignment(matrix, |matrix, col, row, on| {
+        matrix.set(col, row, Module::AlignmentOFF | on as u8)
+    });
+    iterate_data(matrix, data, |matrix, col, row, on| {
+        matrix.set(col, row, Module::DataOFF | on as u8)
+    });
     apply_mask(matrix);
 }
 
-fn place_finder(matrix: &mut Matrix) {
-    fn place_pattern(matrix: &mut Matrix, col: usize, mut row: usize) {
+fn iterate_finder(matrix: &mut Matrix, f: fn(&mut Matrix, usize, usize, bool)) {
+    fn iterate_pattern(
+        matrix: &mut Matrix,
+        col: usize,
+        mut row: usize,
+        f: fn(&mut Matrix, usize, usize, bool),
+    ) {
         for i in 0..7 {
-            matrix.set(col + i, row, Module::FinderON);
+            f(matrix, col + i, row, true);
         }
         row += 1;
 
-        matrix.set(col + 0, row, Module::FinderON);
+        f(matrix, col + 0, row, true);
         for i in 1..6 {
-            matrix.set(col + i, row, Module::FinderOFF);
+            f(matrix, col + i, row, false);
         }
-        matrix.set(col + 6, row, Module::FinderON);
+        f(matrix, col + 6, row, true);
         row += 1;
 
         for _ in 0..3 {
-            matrix.set(col + 0, row, Module::FinderON);
-            matrix.set(col + 1, row, Module::FinderOFF);
-            matrix.set(col + 2, row, Module::FinderON);
-            matrix.set(col + 3, row, Module::FinderON);
-            matrix.set(col + 4, row, Module::FinderON);
-            matrix.set(col + 5, row, Module::FinderOFF);
-            matrix.set(col + 6, row, Module::FinderON);
+            f(matrix, col + 0, row, true);
+            f(matrix, col + 1, row, false);
+            f(matrix, col + 2, row, true);
+            f(matrix, col + 3, row, true);
+            f(matrix, col + 4, row, true);
+            f(matrix, col + 5, row, false);
+            f(matrix, col + 6, row, true);
             row += 1;
         }
 
-        matrix.set(col + 0, row, Module::FinderON);
+        f(matrix, col + 0, row, true);
         for i in 1..6 {
-            matrix.set(col + i, row, Module::FinderOFF);
+            f(matrix, col + i, row, false);
         }
-        matrix.set(col + 6, row, Module::FinderON);
+        f(matrix, col + 6, row, true);
         row += 1;
 
         for i in 0..7 {
-            matrix.set(col + i, row, Module::FinderON);
+            f(matrix, col + i, row, true);
         }
     }
 
-    place_pattern(matrix, 0, 0);
+    iterate_pattern(matrix, 0, 0, f);
     for i in 0..8 {
-        matrix.set(i, 7, Module::Separator);
+        f(matrix, i, 7, false);
     }
     for i in 0..7 {
-        matrix.set(7, i, Module::Separator);
+        f(matrix, 7, i, false);
     }
 
     let width = matrix.width;
-    place_pattern(matrix, 0, width - 7);
+    iterate_pattern(matrix, 0, width - 7, f);
     for i in 0..8 {
-        matrix.set(i, matrix.width - 8, Module::Separator);
+        f(matrix, i, matrix.width - 8, false);
     }
     for i in 0..7 {
-        matrix.set(7, matrix.width - 1 - i, Module::Separator);
+        f(matrix, 7, matrix.width - 1 - i, false);
     }
 
-    place_pattern(matrix, width - 7, 0);
+    iterate_pattern(matrix, width - 7, 0, f);
     for i in 0..8 {
-        matrix.set(matrix.width - 1 - i, 7, Module::Separator);
+        f(matrix, matrix.width - 1 - i, 7, false);
     }
     for i in 0..7 {
-        matrix.set(matrix.width - 8, i, Module::Separator);
+        f(matrix, matrix.width - 8, i, false);
     }
 }
 
-fn place_format(matrix: &mut Matrix) {
+fn iterate_format(matrix: &mut Matrix, f: fn(&mut Matrix, usize, usize, bool)) {
     let format_info = FORMAT_INFO[matrix.ecl as usize][matrix.mask as usize];
     for i in 0..15 {
-        let module = if ((format_info >> i) & 1) == 1 {
-            Module::FormatON
-        } else {
-            Module::FormatOFF
-        };
+        let on = ((format_info >> i) & 1) == 1;
 
         let y = match i {
             i if i < 6 => i,
@@ -200,7 +225,7 @@ fn place_format(matrix: &mut Matrix) {
             8 => 7,
             _ => 14 - i,
         };
-        matrix.set(x, y, module);
+        f(matrix, x, y, on);
 
         let y = match i {
             i if i < 8 => 8,
@@ -210,44 +235,36 @@ fn place_format(matrix: &mut Matrix) {
             i if i < 8 => matrix.width - (i + 1),
             _ => 8,
         };
-        matrix.set(x, y, module);
+        f(matrix, x, y, on);
     }
 
     // always set
-    matrix.set(8, matrix.width - 8, Module::FormatON);
+    f(matrix, 8, matrix.width - 8, true);
 }
 
-fn place_version(matrix: &mut Matrix) {
+fn iterate_version(matrix: &mut Matrix, f: fn(&mut Matrix, usize, usize, bool)) {
     if matrix.version.0 < 7 {
         return;
     }
     let info = VERSION_INFO[matrix.version.0];
 
     for i in 0..18 {
-        let module = if (info >> i) & 1 == 1 {
-            Module::VersionON
-        } else {
-            Module::VersionOFF
-        };
+        let on = (info >> i) & 1 == 1;
 
         let x = i / 3;
         let y = i % 3;
 
-        matrix.set(x, y + matrix.width - 11, module);
-        matrix.set(y + matrix.width - 11, x, module);
+        f(matrix, x, y + matrix.width - 11, on);
+        f(matrix, y + matrix.width - 11, x, on);
     }
 }
 
-fn place_timing(matrix: &mut Matrix) {
+fn iterate_timing(matrix: &mut Matrix, f: fn(&mut Matrix, usize, usize, bool)) {
     let len = matrix.width - 16;
     for i in 0..len {
-        let module = if i & 1 == 0 {
-            Module::TimingON
-        } else {
-            Module::TimingOFF
-        };
-        matrix.set(8 + i, 6, module);
-        matrix.set(6, 8 + i, module);
+        let on = i & 1 == 0;
+        f(matrix, 8 + i, 6, on);
+        f(matrix, 6, 8 + i, on);
     }
 }
 
@@ -259,7 +276,7 @@ const ALIGN_COORDS: [usize; 34] = [
     24, 26, 26, 26, 28, 28, // 35-40
 ];
 
-fn place_alignment(matrix: &mut Matrix) {
+fn iterate_alignment(matrix: &mut Matrix, f: fn(&mut Matrix, usize, usize, bool)) {
     let version = matrix.version.0;
     if version == 1 {
         return;
@@ -288,45 +305,34 @@ fn place_alignment(matrix: &mut Matrix) {
             let row = coords[j] - 2;
 
             for i in 0..5 {
-                matrix.set(col, row + i, Module::AlignmentON)
+                f(matrix, col, row + i, true)
             }
 
             for i in 1..4 {
-                matrix.set(col + i, row, Module::AlignmentON);
-                matrix.set(col + i, row + 1, Module::AlignmentOFF);
-                matrix.set(col + i, row + 2, Module::AlignmentOFF);
-                matrix.set(col + i, row + 3, Module::AlignmentOFF);
-                matrix.set(col + i, row + 4, Module::AlignmentON);
+                f(matrix, col + i, row, true);
+                f(matrix, col + i, row + 1, false);
+                f(matrix, col + i, row + 2, false);
+                f(matrix, col + i, row + 3, false);
+                f(matrix, col + i, row + 4, true);
             }
 
-            matrix.set(col + 2, row + 2, Module::AlignmentON);
+            f(matrix, col + 2, row + 2, true);
 
             for i in 0..5 {
-                matrix.set(col + 4, row + i, Module::AlignmentON)
+                f(matrix, col + 4, row + i, true)
             }
         }
     }
 }
 
 // This depends on all placements occuring beforehand
-fn place_data(matrix: &mut Matrix, data: Vec<u8>) {
-    fn place_module(matrix: &mut Matrix, data: &Vec<u8>, col: usize, row: usize, i: &mut usize) {
-        if matrix.get(col, row) == Module::Unset {
-            // FOR FUTURE KYLE
-            // i means ith data bit
-            // qrcode.value[*i / 8] gets current codeword aka byte
-            // 7 - (*i % 8) gets the current bit position in codeword (greatest to least order)
-            // & 1 to check if set and XOR with mask
-            // in c could just use value directly b/c DataOn = 1, DataOFF = 0, but oh well
-            let module = if ((data[*i / 8] >> (7 - (*i % 8))) & 1) == 1 {
-                Module::DataON
-            } else {
-                Module::DataOFF
-            };
-            *i += 1;
-
-            matrix.set(col, row, module);
-        }
+fn iterate_data(matrix: &mut Matrix, data: Vec<u8>, f: fn(&mut Matrix, usize, usize, bool)) {
+    fn get_bit(data: &Vec<u8>, i: usize) -> bool {
+        // FOR FUTURE KYLE
+        // i-th data bit
+        // qrcode.value[i / 8] gets current codeword aka byte
+        // 7 - (*i % 8) gets the current bit position in codeword (greatest to least order)
+        ((data[i / 8] >> (7 - (i % 8))) & 1) == 1
     }
 
     let mut i = 0;
@@ -336,8 +342,14 @@ fn place_data(matrix: &mut Matrix, data: Vec<u8>) {
 
     loop {
         loop {
-            place_module(matrix, &data, col, row, &mut i);
-            place_module(matrix, &data, col - 1, row, &mut i);
+            if matrix.get(col, row) == Module::Unset {
+                f(matrix, col, row, get_bit(&data, i));
+                i += 1;
+            }
+            if matrix.get(col - 1, row) == Module::Unset {
+                f(matrix, col - 1, row, get_bit(&data, i));
+                i += 1;
+            }
             if row == 0 {
                 break;
             }
@@ -351,8 +363,14 @@ fn place_data(matrix: &mut Matrix, data: Vec<u8>) {
         }
 
         loop {
-            place_module(matrix, &data, col, row, &mut i);
-            place_module(matrix, &data, col - 1, row, &mut i);
+            if matrix.get(col, row) == Module::Unset {
+                f(matrix, col, row, get_bit(&data, i));
+                i += 1;
+            }
+            if matrix.get(col - 1, row) == Module::Unset {
+                f(matrix, col - 1, row, get_bit(&data, i));
+                i += 1;
+            }
             if row == matrix.width - 1 {
                 break;
             }
@@ -388,12 +406,8 @@ fn apply_mask(matrix: &mut Matrix) {
             matrix.set(
                 i,
                 j,
-                // TODO NOTE THAT ROW=j COL=i
-                if module ^ mask_bit(j, i) as u8 == 1 {
-                    Module::DataON
-                } else {
-                    Module::DataOFF
-                },
+                // TODO NOTE THAT ROW=j COL=i, DataOFF = 0, DataON = 1
+                Module::DataOFF | (module ^ mask_bit(j, i) as u8),
             );
         }
     }
