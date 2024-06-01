@@ -1,4 +1,3 @@
-#[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
 use crate::{
@@ -9,10 +8,9 @@ use crate::{
     render::svg::{SvgBuilder, Toggle},
 };
 
-#[cfg(feature = "wasm")]
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-#[cfg(feature = "wasm")]
+
 #[wasm_bindgen]
 pub struct QrOptions {
     min_version: Version,
@@ -50,7 +48,6 @@ impl QrOptions {
     }
 }
 
-#[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub struct SvgOptions {
     margin: f64,
@@ -62,9 +59,9 @@ pub struct SvgOptions {
     toggle_options: u8,
 }
 
-#[cfg_attr(feature = "wasm", wasm_bindgen)]
+#[wasm_bindgen]
 impl SvgOptions {
-    #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
+    #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         SvgOptions {
             margin: 2.0,
@@ -118,7 +115,6 @@ impl SvgOptions {
     }
 }
 
-#[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub struct SvgResult {
     #[wasm_bindgen(getter_with_clone)]
@@ -138,6 +134,45 @@ pub enum SvgError {
 }
 
 #[cfg(feature = "wasm")]
+#[wasm_bindgen]
+pub fn get_matrix(input: &str, qr_options: QrOptions) -> Result<Matrix, SvgError> {
+    #[cfg(feature = "console_error_panic_hook")]
+    console_error_panic_hook::set_once();
+
+    let mut mode = Mode::Byte;
+
+    if let Some(specified) = qr_options.mode {
+        if specified != Mode::Byte {
+            let lowest = get_encoding_mode(input);
+            if (lowest as u8) > (specified as u8) {
+                return Err(SvgError::InvalidEncoding);
+            }
+            mode = specified;
+        }
+    } else {
+        mode = get_encoding_mode(input);
+    }
+
+    let data = Data::new(
+        vec![Segment { mode, text: input }],
+        qr_options.min_version,
+        qr_options.min_ecl,
+    );
+
+    let data = match data {
+        Some(x) => x,
+        None => return Err(SvgError::ExceedsMaxCapacity),
+    };
+
+    let matrix = Matrix::new(data, qr_options.mask);
+
+    Ok(matrix)
+}
+
+// Duplicate code b/c mode is not returned from get_matrix
+// Options
+// - remove multi segments/modes functionality
+// - fully integegrate multi segments
 #[wasm_bindgen]
 pub fn get_svg(
     input: &str,

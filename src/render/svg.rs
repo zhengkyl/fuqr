@@ -16,8 +16,7 @@ pub struct SvgBuilder<'a> {
     toggle_options: u8,
 }
 
-#[cfg(feature = "wasm")]
-#[wasm_bindgen]
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub enum Toggle {
     Background,
     BackgroundPixels,

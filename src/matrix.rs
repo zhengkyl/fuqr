@@ -7,6 +7,7 @@ use crate::{
     mask::score,
     qrcode::{Mask, Version, ECL},
 };
+
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
@@ -42,6 +43,21 @@ impl BitOr<u8> for Module {
     }
 }
 
+// Can't figure out how to conditionally apply #[wasm_bindgen(getter_with_clone)]
+// implementing getter manually doesn't work either
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen]
+pub struct Matrix {
+    #[wasm_bindgen(getter_with_clone)]
+    pub value: Vec<Module>,
+    pub width: usize,
+    pub version: Version,
+    pub ecl: ECL,
+    pub mask: Mask,
+}
+
+#[cfg(not(feature = "wasm"))]
 pub struct Matrix {
     pub value: Vec<Module>,
     pub width: usize,
