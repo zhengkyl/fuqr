@@ -1,14 +1,11 @@
-use std::fs;
+use std::{fs, vec};
 
 use fuqr::{
     constants::NUM_EC_CODEWORDS,
     data::{Data, Segment},
     matrix::{Matrix, Module},
     qrcode::{Mask, Mode, Version, ECL},
-    render::{
-        svg::{render_svg, FinderPattern, Toggle},
-        text::render_utf8,
-    },
+    render::text::render_utf8,
 };
 
 fn main() -> std::io::Result<()> {

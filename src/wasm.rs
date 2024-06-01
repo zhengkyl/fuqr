@@ -6,13 +6,12 @@ use crate::{
     encoding::get_encoding_mode,
     matrix::Matrix,
     qrcode::{Mask, Mode, Version, ECL},
-    render::svg::{render_svg, SvgBuilder},
+    render::svg::{SvgBuilder, Toggle},
 };
 
 #[cfg(feature = "wasm")]
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
-
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
 pub struct QrOptions {
@@ -53,6 +52,74 @@ impl QrOptions {
 
 #[cfg(feature = "wasm")]
 #[wasm_bindgen]
+pub struct SvgOptions {
+    margin: f64,
+    unit: f64,
+    foreground: String,
+    background: String,
+    scale_x_matrix: Vec<u8>, // scale x 0-200%
+    scale_y_matrix: Vec<u8>, // scale y 0-200%
+    toggle_options: u8,
+}
+
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+impl SvgOptions {
+    #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
+    pub fn new() -> Self {
+        SvgOptions {
+            margin: 2.0,
+            unit: 1.0,
+            foreground: "#000".into(),
+            background: "#fff".into(),
+            scale_x_matrix: Vec::new(),
+            scale_y_matrix: Vec::new(),
+            toggle_options: 0,
+        }
+        .toggle(Toggle::Background)
+        .toggle(Toggle::ForegroundPixels)
+    }
+    pub fn margin(mut self, margin: f64) -> SvgOptions {
+        self.margin = margin;
+        self
+    }
+    pub fn unit(mut self, unit: f64) -> SvgOptions {
+        self.unit = unit;
+        self
+    }
+    pub fn foreground(mut self, foreground: String) -> SvgOptions {
+        self.foreground = foreground;
+        self
+    }
+    pub fn background(mut self, background: String) -> SvgOptions {
+        self.background = background;
+        self
+    }
+    pub fn scale_x_matrix(mut self, scale_matrix: Vec<f64>) -> SvgOptions {
+        let scale_matrix = scale_matrix.into_iter().map(|f| f as u8).collect();
+        self.scale_x_matrix = scale_matrix;
+        self
+    }
+    pub fn scale_y_matrix(mut self, scale_matrix: Vec<f64>) -> SvgOptions {
+        let scale_matrix = scale_matrix.into_iter().map(|f| f as u8).collect();
+        self.scale_y_matrix = scale_matrix;
+        self
+    }
+    pub fn scale_matrix(mut self, scale_matrix: Vec<f64>) -> SvgOptions {
+        let scale_matrix = scale_matrix.into_iter().map(|f| f as u8).collect();
+
+        // I don't think it's worth worrying about, esp b/c >99% qrcodes are small
+        self.scale_x_matrix = scale_matrix;
+        self.scale_y_matrix = self.scale_x_matrix.clone();
+        self
+    }
+    pub fn toggle(mut self, toggle: Toggle) -> SvgOptions {
+        self.toggle_options ^= 1 << toggle as u8;
+        self
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen]
 pub struct SvgResult {
     #[wasm_bindgen(getter_with_clone)]
     pub svg: String,
@@ -75,7 +142,7 @@ pub enum SvgError {
 pub fn get_svg(
     input: &str,
     qr_options: QrOptions,
-    render_options: SvgBuilder,
+    svg_options: SvgOptions,
 ) -> Result<SvgResult, SvgError> {
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
@@ -107,8 +174,17 @@ pub fn get_svg(
 
     let matrix = Matrix::new(data, qr_options.mask);
 
+    let builder = SvgBuilder::new(&matrix)
+        .margin(svg_options.margin)
+        .foreground(svg_options.foreground)
+        .background(svg_options.background)
+        .scale_x_matrix(svg_options.scale_x_matrix)
+        .scale_y_matrix(svg_options.scale_y_matrix)
+        .unit(svg_options.unit)
+        .toggle_options(svg_options.toggle_options);
+
     Ok(SvgResult {
-        svg: render_svg(&matrix, render_options),
+        svg: builder.render_svg(),
         mode,
         ecl: matrix.ecl,
         version: matrix.version,
