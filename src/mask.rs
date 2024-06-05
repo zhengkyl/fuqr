@@ -1,4 +1,4 @@
-use crate::matrix::{Matrix, Module};
+use crate::matrix::{Matrix, Module, QrMatrix};
 
 // todo UNTESTED CODE: HERE BE DRAGONS
 // if score is wrong for all masks, then this still works

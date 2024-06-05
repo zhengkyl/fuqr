@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::matrix::Matrix;
+use crate::matrix::{Matrix, QrMatrix};
 
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;

@@ -1,4 +1,4 @@
-use crate::matrix::Matrix;
+use crate::matrix::{Matrix, QrMatrix};
 
 pub fn render_utf8(matrix: &Matrix) -> String {
     // row length +1 for \n and take ceil of rows / 2 if odd

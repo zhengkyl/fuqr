@@ -24,7 +24,7 @@ fn main() -> std::io::Result<()> {
             //     text: "你好",
             // },
         ],
-        Version(4),
+        Version(1),
         ECL::Low,
     );
 
@@ -50,6 +50,10 @@ fn main() -> std::io::Result<()> {
     //             .background("#ff0000".into()),
     //     ),
     // )?;
+    println!(
+        "{}, {}, {}",
+        matrix.version.0, matrix.ecl as u8, matrix.mask as u8
+    );
     println!("{}", render_utf8(&matrix));
     Ok(())
 }
