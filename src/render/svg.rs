@@ -7,7 +7,6 @@ use wasm_bindgen::prelude::*;
 
 pub struct SvgBuilder<'a> {
     matrix: &'a Matrix,
-    margin: f64,
     unit: f64,
     foreground: String,
     background: String,
@@ -25,15 +24,11 @@ pub enum Toggle {
 
 impl<'a> SvgBuilder<'a> {
     pub fn new(matrix: &'a Matrix) -> Self {
-        let default_margin = 2;
-        let full_width = matrix.width * 4 + 17 + 2 * (default_margin);
-
-        let scale_x_matrix = Rc::new(vec![100; full_width * full_width]);
+        let scale_x_matrix = Rc::new(vec![100; matrix.width() * matrix.height()]);
         let scale_y_matrix = scale_x_matrix.clone();
 
         SvgBuilder {
             matrix,
-            margin: default_margin as f64,
             unit: 1.0,
             foreground: "#000".into(),
             background: "#fff".into(),
@@ -43,10 +38,6 @@ impl<'a> SvgBuilder<'a> {
         }
         .toggle(Toggle::Background)
         .toggle(Toggle::ForegroundPixels)
-    }
-    pub fn margin(mut self, margin: f64) -> Self {
-        self.margin = margin;
-        self
     }
     pub fn unit(mut self, unit: f64) -> Self {
         self.unit = unit;
@@ -86,29 +77,30 @@ impl<'a> SvgBuilder<'a> {
     }
 
     pub fn render_svg(&self) -> String {
-        let full_width = self.matrix.width as f64 * self.unit + (2.0 * self.margin);
+        let unit_width = self.matrix.width() as f64 * self.unit;
+        let unit_height = self.matrix.height() as f64 * self.unit;
 
         // TODO better initial capacity
         // guestimate, roughly half of pixels are black
-        let mut result = String::with_capacity(40 * self.matrix.width * self.matrix.width / 2);
+        let mut result = String::with_capacity(40 * self.matrix.width() * self.matrix.height() / 2);
         result.push_str(&format!(
-            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {0} {0}">"#,
-            full_width
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}">"#,
+            unit_width, unit_height
         ));
 
         if self.get(Toggle::Background) {
             result.push_str(&format!(
-                r#"<rect height="{}" width="{}" fill="{}"/>"#,
-                full_width, full_width, self.background
+                r#"<rect width="{}" height="{}" fill="{}"/>"#,
+                unit_width, unit_height, self.background
             ));
         }
 
         if self.get(Toggle::BackgroundPixels) {
             result.push_str(&format!("<path fill=\"{}\" d=\"", self.background));
-            for x in 0..self.matrix.width {
-                for y in 0..self.matrix.width {
-                    let x_scale = self.scale_x_matrix[y * self.matrix.width + x];
-                    let y_scale = self.scale_y_matrix[y * self.matrix.width + x];
+            for y in 0..self.matrix.height() {
+                for x in 0..self.matrix.width() {
+                    let x_scale = self.scale_x_matrix[y * self.matrix.width() + x];
+                    let y_scale = self.scale_y_matrix[y * self.matrix.width() + x];
 
                     let module_type = self.matrix.get(x, y);
 
@@ -123,8 +115,8 @@ impl<'a> SvgBuilder<'a> {
                     // keep module centered if size != scale
                     result.push_str(&format!(
                         "M{},{}h{}v{}h-{}z",
-                        x as f64 * self.unit + self.margin + (self.unit - x_module_size) / 2.0,
-                        y as f64 * self.unit + self.margin + (self.unit - y_module_size) / 2.0,
+                        x as f64 * self.unit + (self.unit - x_module_size) / 2.0,
+                        y as f64 * self.unit + (self.unit - y_module_size) / 2.0,
                         x_module_size,
                         y_module_size,
                         x_module_size
@@ -137,10 +129,10 @@ impl<'a> SvgBuilder<'a> {
         if self.get(Toggle::ForegroundPixels) {
             result.push_str(&format!("<path fill=\"{}\" d=\"", self.foreground));
 
-            for x in 0..self.matrix.width {
-                for y in 0..self.matrix.width {
-                    let x_scale = self.scale_x_matrix[y * self.matrix.width + x];
-                    let y_scale = self.scale_y_matrix[y * self.matrix.width + x];
+            for y in 0..self.matrix.height() {
+                for x in 0..self.matrix.width() {
+                    let x_scale = self.scale_x_matrix[y * self.matrix.width() + x];
+                    let y_scale = self.scale_y_matrix[y * self.matrix.width() + x];
 
                     let module_type = self.matrix.get(x, y);
 
@@ -155,8 +147,8 @@ impl<'a> SvgBuilder<'a> {
                     // keep module centered if size != scale
                     result.push_str(&format!(
                         "M{},{}h{}v{}h-{}z",
-                        x as f64 * self.unit + self.margin + (self.unit - x_module_size) / 2.0,
-                        y as f64 * self.unit + self.margin + (self.unit - y_module_size) / 2.0,
+                        x as f64 * self.unit + (self.unit - x_module_size) / 2.0,
+                        y as f64 * self.unit + (self.unit - y_module_size) / 2.0,
                         x_module_size,
                         y_module_size,
                         x_module_size
@@ -165,8 +157,6 @@ impl<'a> SvgBuilder<'a> {
             }
             result.push_str("\"/>");
         }
-
-        // render_finder(matrix, &options, &mut result);
 
         result.push_str("</svg>");
 

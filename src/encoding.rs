@@ -122,7 +122,6 @@ fn byte_to_b45(c: u8) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use crate::data::Segment;
     use crate::qrcode::ECL;
 
     use super::*;
@@ -156,38 +155,14 @@ mod tests {
 
     #[test]
     fn encode_numeric_works() {
-        let data = Data::new(
-            vec![Segment {
-                mode: Mode::Numeric,
-                text: "1",
-            }],
-            Version(1),
-            ECL::Low,
-        )
-        .unwrap();
+        let data = Data::new("1", Mode::Numeric, Version(1), ECL::Low).unwrap();
 
         assert_eq!(data.value, get_data_vec("0001 0000000001 0001"));
 
-        let data = Data::new(
-            vec![Segment {
-                mode: Mode::Numeric,
-                text: "99",
-            }],
-            Version(1),
-            ECL::Low,
-        )
-        .unwrap();
+        let data = Data::new("99", Mode::Numeric, Version(1), ECL::Low).unwrap();
         assert_eq!(data.value, get_data_vec("0001 0000000010 1100011"));
 
-        let data = Data::new(
-            vec![Segment {
-                mode: Mode::Numeric,
-                text: "123456",
-            }],
-            Version(1),
-            ECL::Low,
-        )
-        .unwrap();
+        let data = Data::new("123456", Mode::Numeric, Version(1), ECL::Low).unwrap();
         assert_eq!(
             data.value,
             get_data_vec("0001 0000000110 0001111011 0111001000")
@@ -196,37 +171,13 @@ mod tests {
 
     #[test]
     fn encode_alphanumeric_works() {
-        let data = Data::new(
-            vec![Segment {
-                mode: Mode::Alphanumeric,
-                text: "1",
-            }],
-            Version(1),
-            ECL::Low,
-        )
-        .unwrap();
+        let data = Data::new("1", Mode::Alphanumeric, Version(1), ECL::Low).unwrap();
         assert_eq!(data.value, get_data_vec("0010 000000001 000001"));
 
-        let data = Data::new(
-            vec![Segment {
-                mode: Mode::Alphanumeric,
-                text: "99",
-            }],
-            Version(1),
-            ECL::Low,
-        )
-        .unwrap();
+        let data = Data::new("99", Mode::Alphanumeric, Version(1), ECL::Low).unwrap();
         assert_eq!(data.value, get_data_vec("0010 000000010 00110011110"));
 
-        let data = Data::new(
-            vec![Segment {
-                mode: Mode::Alphanumeric,
-                text: "ABC1::4",
-            }],
-            Version(1),
-            ECL::Low,
-        )
-        .unwrap();
+        let data = Data::new("ABC1::4", Mode::Alphanumeric, Version(1), ECL::Low).unwrap();
         assert_eq!(
             data.value,
             get_data_vec("0010 000000111 00111001101 01000011101 11111101000 000100")
@@ -235,15 +186,7 @@ mod tests {
 
     #[test]
     fn encode_byte_works() {
-        let data = Data::new(
-            vec![Segment {
-                mode: Mode::Byte,
-                text: "0",
-            }],
-            Version(1),
-            ECL::Low,
-        )
-        .unwrap();
+        let data = Data::new("0", Mode::Byte, Version(1), ECL::Low).unwrap();
 
         assert_eq!(data.value, get_data_vec("0100 00000001 00110000"));
     }

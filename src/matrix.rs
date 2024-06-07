@@ -5,7 +5,7 @@ use crate::{
     data::Data,
     error_correction::ecc_and_sequence,
     mask::score,
-    qrcode::{Mask, Version, ECL},
+    qrcode::{Mask, Mode, Version, ECL},
 };
 
 #[cfg(feature = "wasm")]
@@ -43,6 +43,54 @@ impl BitOr<u8> for Module {
     }
 }
 
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+#[derive(Clone, Copy)]
+pub struct Margin {
+    pub top: usize,
+    pub right: usize,
+    pub bottom: usize,
+    pub left: usize,
+}
+
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+impl Margin {
+    #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
+    pub fn new(margin: usize) -> Self {
+        Margin {
+            top: margin,
+            right: margin,
+            bottom: margin,
+            left: margin,
+        }
+    }
+    pub fn top(mut self, top: usize) -> Self {
+        self.top = top;
+        self
+    }
+    pub fn right(mut self, right: usize) -> Self {
+        self.right = right;
+        self
+    }
+    pub fn bottom(mut self, bottom: usize) -> Self {
+        self.bottom = bottom;
+        self
+    }
+    pub fn left(mut self, left: usize) -> Self {
+        self.left = left;
+        self
+    }
+    pub fn y(mut self, y: usize) -> Self {
+        self.top = y;
+        self.bottom = y;
+        self
+    }
+    pub fn x(mut self, x: usize) -> Self {
+        self.left = x;
+        self.right = x;
+        self
+    }
+}
+
 // Can't figure out how to conditionally apply #[wasm_bindgen(getter_with_clone)]
 // implementing getter manually doesn't work either
 
@@ -51,7 +99,8 @@ impl BitOr<u8> for Module {
 pub struct Matrix {
     #[wasm_bindgen(getter_with_clone)]
     pub value: Vec<Module>,
-    pub width: usize,
+    pub margin: Margin,
+    pub mode: Mode,
     pub version: Version,
     pub ecl: ECL,
     pub mask: Mask,
@@ -60,18 +109,18 @@ pub struct Matrix {
 #[cfg(not(feature = "wasm"))]
 pub struct Matrix {
     pub value: Vec<Module>,
-    pub width: usize,
+    pub margin: Margin,
+    pub mode: Mode,
     pub version: Version,
     pub ecl: ECL,
     pub mask: Mask,
 }
 
 impl Matrix {
-    pub fn new(data: Data, mask: Option<Mask>) -> Self {
-        let width = data.version.0 * 4 + 17;
+    pub fn new(data: Data, mask: Option<Mask>, margin: Margin) -> Self {
         let mut matrix = Matrix {
-            width,
-            value: vec![Module::Unset; width * width],
+            value: Vec::new(),
+            mode: data.mode,
             version: data.version,
             ecl: data.ecl,
             mask: if let Some(mask) = mask {
@@ -79,7 +128,9 @@ impl Matrix {
             } else {
                 Mask::M0
             },
+            margin,
         };
+        matrix.value = vec![Module::Unset; matrix.width() * matrix.height()];
 
         matrix.iterate_finder(|matrix, col, row, module| matrix.set(col, row, module));
         matrix.iterate_format(matrix.ecl, matrix.mask, |matrix, col, row, module| {
@@ -145,22 +196,33 @@ impl QrMatrix for Matrix {
     fn set(&mut self, x: usize, y: usize, module: Module) {
         // todo consider layout
         // Writing data means zigzag up and down, right to left
-        let i = x * self.width + y;
+        let i = y * self.width() + x;
         self.value[i] = module;
     }
     fn get(&self, x: usize, y: usize) -> Module {
-        let i = x * self.width + y;
+        let i = y * self.width() + x;
         self.value[i]
     }
-    fn width(&self) -> usize {
-        self.width
+    fn qr_width(&self) -> usize {
+        self.version.0 * 4 + 17
+    }
+    fn margin(&self) -> Margin {
+        self.margin
     }
 }
 
 pub trait QrMatrix {
     fn set(&mut self, x: usize, y: usize, module: Module);
     fn get(&self, x: usize, y: usize) -> Module;
-    fn width(&self) -> usize;
+    fn qr_width(&self) -> usize;
+    fn margin(&self) -> Margin;
+
+    fn width(&self) -> usize {
+        self.qr_width() + self.margin().left + self.margin().right
+    }
+    fn height(&self) -> usize {
+        self.qr_width() + self.margin().top + self.margin().bottom
+    }
 
     fn iterate_finder_part(
         &mut self,
@@ -204,28 +266,66 @@ pub trait QrMatrix {
     }
 
     fn iterate_finder(&mut self, f: fn(&mut Self, usize, usize, Module)) {
-        self.iterate_finder_part(0, 0, f);
+        self.iterate_finder_part(self.margin().left, self.margin().top, f);
         for i in 0..8 {
-            f(self, i, 7, Module::FinderOFF);
+            f(
+                self,
+                self.margin().left + i,
+                self.margin().top + 7,
+                Module::FinderOFF,
+            );
         }
         for i in 0..7 {
-            f(self, 7, i, Module::FinderOFF);
+            f(
+                self,
+                self.margin().left + 7,
+                self.margin().top + i,
+                Module::FinderOFF,
+            );
         }
 
-        self.iterate_finder_part(0, self.width() - 7, f);
+        self.iterate_finder_part(
+            self.margin().left,
+            self.margin().top + self.qr_width() - 7,
+            f,
+        );
         for i in 0..8 {
-            f(self, i, self.width() - 8, Module::FinderOFF);
+            f(
+                self,
+                self.margin().left + i,
+                self.margin().top + self.qr_width() - 8,
+                Module::FinderOFF,
+            );
         }
         for i in 0..7 {
-            f(self, 7, self.width() - 1 - i, Module::FinderOFF);
+            f(
+                self,
+                self.margin().left + 7,
+                self.margin().top + self.qr_width() - 1 - i,
+                Module::FinderOFF,
+            );
         }
 
-        self.iterate_finder_part(self.width() - 7, 0, f);
+        self.iterate_finder_part(
+            self.margin().left + self.qr_width() - 7,
+            self.margin().top,
+            f,
+        );
         for i in 0..8 {
-            f(self, self.width() - 1 - i, 7, Module::FinderOFF);
+            f(
+                self,
+                self.margin().left + self.qr_width() - 1 - i,
+                self.margin().top + 7,
+                Module::FinderOFF,
+            );
         }
         for i in 0..7 {
-            f(self, self.width() - 8, i, Module::FinderOFF);
+            f(
+                self,
+                self.margin().left + self.qr_width() - 8,
+                self.margin().top + i,
+                Module::FinderOFF,
+            );
         }
     }
 
@@ -244,21 +344,26 @@ pub trait QrMatrix {
                 8 => 7,
                 _ => 14 - i,
             };
-            f(self, x, y, module);
+            f(self, self.margin().left + x, self.margin().top + y, module);
 
             let y = match i {
                 i if i < 8 => 8,
-                _ => self.width() - (15 - i),
+                _ => self.qr_width() - (15 - i),
             };
             let x = match i {
-                i if i < 8 => self.width() - (i + 1),
+                i if i < 8 => self.qr_width() - (i + 1),
                 _ => 8,
             };
-            f(self, x, y, module);
+            f(self, self.margin().left + x, self.margin().top + y, module);
         }
 
         // always set
-        f(self, 8, self.width() - 8, Module::FormatON);
+        f(
+            self,
+            self.margin().left + 8,
+            self.margin().top + self.qr_width() - 8,
+            Module::FormatON,
+        );
     }
 
     fn iterate_version(&mut self, version: Version, f: fn(&mut Self, usize, usize, Module)) {
@@ -273,17 +378,37 @@ pub trait QrMatrix {
             let x = i / 3;
             let y = i % 3;
 
-            f(self, x, y + self.width() - 11, module);
-            f(self, y + self.width() - 11, x, module);
+            f(
+                self,
+                self.margin().left + x,
+                self.margin().top + y + self.qr_width() - 11,
+                module,
+            );
+            f(
+                self,
+                self.margin().left + y + self.qr_width() - 11,
+                self.margin().top + x,
+                module,
+            );
         }
     }
 
     fn iterate_timing(&mut self, f: fn(&mut Self, usize, usize, Module)) {
-        let len = self.width() - 16;
+        let len = self.qr_width() - 16;
         for i in 0..len {
             let module = Module::TimingOFF | ((i & 1) ^ 1) as u8;
-            f(self, 8 + i, 6, module);
-            f(self, 6, 8 + i, module);
+            f(
+                self,
+                self.margin().left + 8 + i,
+                self.margin().top + 6,
+                module,
+            );
+            f(
+                self,
+                self.margin().left + 6,
+                self.margin().top + 8 + i,
+                module,
+            );
         }
     }
 
@@ -294,7 +419,7 @@ pub trait QrMatrix {
         }
 
         let first = 6;
-        let last = self.width() - 7;
+        let last = self.qr_width() - 7;
         let len = version / 7 + 2;
         let mut coords = Vec::with_capacity(len);
 
@@ -316,21 +441,61 @@ pub trait QrMatrix {
                 let row = coords[j] - 2;
 
                 for i in 0..5 {
-                    f(self, col, row + i, Module::AlignmentON)
+                    f(
+                        self,
+                        self.margin().left + col,
+                        self.margin().top + row + i,
+                        Module::AlignmentON,
+                    )
                 }
 
                 for i in 1..4 {
-                    f(self, col + i, row, Module::AlignmentON);
-                    f(self, col + i, row + 1, Module::AlignmentOFF);
-                    f(self, col + i, row + 2, Module::AlignmentOFF);
-                    f(self, col + i, row + 3, Module::AlignmentOFF);
-                    f(self, col + i, row + 4, Module::AlignmentON);
+                    f(
+                        self,
+                        self.margin().left + col + i,
+                        self.margin().top + row,
+                        Module::AlignmentON,
+                    );
+                    f(
+                        self,
+                        self.margin().left + col + i,
+                        self.margin().top + row + 1,
+                        Module::AlignmentOFF,
+                    );
+                    f(
+                        self,
+                        self.margin().left + col + i,
+                        self.margin().top + row + 2,
+                        Module::AlignmentOFF,
+                    );
+                    f(
+                        self,
+                        self.margin().left + col + i,
+                        self.margin().top + row + 3,
+                        Module::AlignmentOFF,
+                    );
+                    f(
+                        self,
+                        self.margin().left + col + i,
+                        self.margin().top + row + 4,
+                        Module::AlignmentON,
+                    );
                 }
 
-                f(self, col + 2, row + 2, Module::AlignmentON);
+                f(
+                    self,
+                    self.margin().left + col + 2,
+                    self.margin().top + row + 2,
+                    Module::AlignmentON,
+                );
 
                 for i in 0..5 {
-                    f(self, col + 4, row + i, Module::AlignmentON)
+                    f(
+                        self,
+                        self.margin().left + col + 4,
+                        self.margin().top + row + i,
+                        Module::AlignmentON,
+                    )
                 }
             }
         }
@@ -348,17 +513,29 @@ pub trait QrMatrix {
 
         let mut i = 0;
 
-        let mut col = self.width() - 1;
-        let mut row = self.width() - 1;
+        let mut col = self.qr_width() - 1;
+        let mut row = self.qr_width() - 1;
 
+        // get() coords wrong
         loop {
             loop {
-                if self.get(col, row) == Module::Unset {
-                    f(self, col, row, get_bit(&data, i));
+                if self.get(self.margin().left + col, self.margin().top + row) == Module::Unset {
+                    f(
+                        self,
+                        self.margin().left + col,
+                        self.margin().top + row,
+                        get_bit(&data, i),
+                    );
                     i += 1;
                 }
-                if self.get(col - 1, row) == Module::Unset {
-                    f(self, col - 1, row, get_bit(&data, i));
+                if self.get(self.margin().left + col - 1, self.margin().top + row) == Module::Unset
+                {
+                    f(
+                        self,
+                        self.margin().left + col - 1,
+                        self.margin().top + row,
+                        get_bit(&data, i),
+                    );
                     i += 1;
                 }
                 if row == 0 {
@@ -374,15 +551,26 @@ pub trait QrMatrix {
             }
 
             loop {
-                if self.get(col, row) == Module::Unset {
-                    f(self, col, row, get_bit(&data, i));
+                if self.get(self.margin().left + col, self.margin().top + row) == Module::Unset {
+                    f(
+                        self,
+                        self.margin().left + col,
+                        self.margin().top + row,
+                        get_bit(&data, i),
+                    );
                     i += 1;
                 }
-                if self.get(col - 1, row) == Module::Unset {
-                    f(self, col - 1, row, get_bit(&data, i));
+                if self.get(self.margin().left + col - 1, self.margin().top + row) == Module::Unset
+                {
+                    f(
+                        self,
+                        self.margin().left + col - 1,
+                        self.margin().top + row,
+                        get_bit(&data, i),
+                    );
                     i += 1;
                 }
-                if row == self.width() - 1 {
+                if row == self.qr_width() - 1 {
                     break;
                 }
                 row += 1;
@@ -407,16 +595,16 @@ pub trait QrMatrix {
             Mask::M7 => |row: usize, col: usize| ((row + col) % 2 + (row * col) % 3) % 2 == 0,
         };
 
-        for i in 0..self.width() {
-            for j in 0..self.width() {
-                let module = self.get(i, j) as u8;
+        for i in 0..self.qr_width() {
+            for j in 0..self.qr_width() {
+                let module = self.get(self.margin().left + i, self.margin().top + j) as u8;
                 if module | 1 != Module::DataON as u8 {
                     continue;
                 }
 
                 self.set(
-                    i,
-                    j,
+                    self.margin().left + i,
+                    self.margin().top + j,
                     // TODO NOTE THAT ROW=j COL=i, DataOFF = 0, DataON = 1
                     Module::DataOFF | (module ^ mask_bit(j, i) as u8),
                 );

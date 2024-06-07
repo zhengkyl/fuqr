@@ -1,32 +1,14 @@
 use std::{fs, vec};
 
 use fuqr::{
-    constants::NUM_EC_CODEWORDS,
-    data::{Data, Segment},
-    matrix::{Matrix, Module},
+    data::Data,
+    matrix::{Margin, Matrix},
     qrcode::{Mask, Mode, Version, ECL},
     render::text::render_utf8,
 };
 
 fn main() -> std::io::Result<()> {
-    let data = Data::new(
-        vec![
-            Segment {
-                mode: Mode::Byte,
-                text: "Greetings traveler",
-            },
-            // Segment {
-            //     mode: Mode::Byte,
-            //     text: "你好",
-            // },
-            // Segment {
-            //     mode: Mode::Byte,
-            //     text: "你好",
-            // },
-        ],
-        Version(1),
-        ECL::Low,
-    );
+    let data = Data::new("Greetings traveler", Mode::Byte, Version(1), ECL::Low);
 
     let data = match data {
         Some(x) => x,
@@ -34,7 +16,7 @@ fn main() -> std::io::Result<()> {
     };
     // todo
     // rn codewords takes over data, but could copy to allow change ecl, version
-    let matrix = Matrix::new(data, None);
+    let matrix = Matrix::new(data, Some(Mask::M0), Margin::new(2));
     // todo
     // func to change mask
     // fs::write(

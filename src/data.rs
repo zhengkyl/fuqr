@@ -7,36 +7,30 @@ use crate::{
 pub struct Data {
     pub value: Vec<u8>,
     pub bit_len: usize,
+    pub mode: Mode,
     pub version: Version,
     pub ecl: ECL,
 }
 
-pub struct Segment<'a> {
-    pub mode: Mode,
-    pub text: &'a str,
-}
-
 impl Data {
-    pub fn new(segments: Vec<Segment>, min_version: Version, min_ecl: ECL) -> Option<Self> {
+    pub fn new(text: &str, mode: Mode, min_version: Version, min_ecl: ECL) -> Option<Self> {
         let mut bits = 0;
-        for segment in &segments {
-            bits += 4 + bits_char_count_indicator(min_version, segment.mode);
-            let char_len = segment.text.len();
-            match segment.mode {
-                Mode::Numeric => {
-                    bits += (char_len / 3) * 10;
-                    match char_len % 3 {
-                        2 => bits += 7,
-                        1 => bits += 4,
-                        _ => (),
-                    }
+        bits += 4 + bits_char_count_indicator(min_version, mode);
+        let char_len = text.len();
+        match mode {
+            Mode::Numeric => {
+                bits += (char_len / 3) * 10;
+                match char_len % 3 {
+                    2 => bits += 7,
+                    1 => bits += 4,
+                    _ => (),
                 }
-                Mode::Alphanumeric => {
-                    bits += (char_len / 2) * 11 + (char_len % 2) * 6;
-                }
-                Mode::Byte => {
-                    bits += char_len * 8;
-                }
+            }
+            Mode::Alphanumeric => {
+                bits += (char_len / 2) * 11 + (char_len % 2) * 6;
+            }
+            Mode::Byte => {
+                bits += char_len * 8;
             }
         }
 
@@ -52,18 +46,16 @@ impl Data {
             min_version += 1;
 
             data_codewords = (NUM_DATA_MODULES[min_version] / 8) as usize;
-            for segment in &segments {
-                // char count indicator length increase
-                match segment.mode {
-                    Mode::Byte => {
-                        if min_version == 10 {
-                            bits += 8;
-                        }
+            // char count indicator length increase
+            match mode {
+                Mode::Byte => {
+                    if min_version == 10 {
+                        bits += 8;
                     }
-                    _ => {
-                        if min_version == 10 || min_version == 27 {
-                            bits += 2;
-                        }
+                }
+                _ => {
+                    if min_version == 10 || min_version == 27 {
+                        bits += 2;
                     }
                 }
             }
@@ -88,10 +80,16 @@ impl Data {
         let mut data = Data {
             value: Vec::with_capacity(data_codewords),
             bit_len: 0,
+            mode,
             version: Version(min_version),
             ecl: max_ecl,
         };
-        encode(&mut data, segments);
+
+        match mode {
+            Mode::Numeric => encode_numeric(&mut data, text),
+            Mode::Alphanumeric => encode_alphanumeric(&mut data, text),
+            Mode::Byte => encode_byte(&mut data, text),
+        }
         Some(data)
     }
 
@@ -118,16 +116,6 @@ impl Data {
 
         if len > 0 {
             self.value.push((input << (8 - len)) as u8);
-        }
-    }
-}
-
-fn encode(data: &mut Data, segments: Vec<Segment>) {
-    for segment in segments {
-        match segment.mode {
-            Mode::Numeric => encode_numeric(data, segment.text),
-            Mode::Alphanumeric => encode_alphanumeric(data, segment.text),
-            Mode::Byte => encode_byte(data, segment.text),
         }
     }
 }
