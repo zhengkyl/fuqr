@@ -63,18 +63,24 @@ impl Margin {
             left: margin,
         }
     }
+
+    // in js, properties and methods share namespace
+    #[cfg_attr(feature = "wasm", wasm_bindgen(js_name = setTop))]
     pub fn top(mut self, top: usize) -> Self {
         self.top = top;
         self
     }
+    #[cfg_attr(feature = "wasm", wasm_bindgen(js_name = setRight))]
     pub fn right(mut self, right: usize) -> Self {
         self.right = right;
         self
     }
+    #[cfg_attr(feature = "wasm", wasm_bindgen(js_name = setBottom))]
     pub fn bottom(mut self, bottom: usize) -> Self {
         self.bottom = bottom;
         self
     }
+    #[cfg_attr(feature = "wasm", wasm_bindgen(js_name = setLeft))]
     pub fn left(mut self, left: usize) -> Self {
         self.left = left;
         self
@@ -189,6 +195,20 @@ impl Matrix {
         }
 
         matrix
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen]
+impl Matrix {
+    // wasm-bindgen doesn't support trait impls
+    #[wasm_bindgen(js_name=width)]
+    pub fn width_wrapper(&self) -> usize {
+        self.width()
+    }
+    #[wasm_bindgen(js_name=height)]
+    pub fn height_wrapper(&self) -> usize {
+        self.height()
     }
 }
 
