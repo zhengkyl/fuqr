@@ -5,7 +5,7 @@ use crate::{
     encoding::get_encoding_mode,
     matrix::{Margin, Matrix},
     qrcode::{Mask, Mode, Version, ECL},
-    render::svg::{SvgBuilder, Toggle},
+    render::{svg::render_svg, RenderData, Toggle},
 };
 
 #[global_allocator]
@@ -57,7 +57,7 @@ impl QrOptions {
 #[wasm_bindgen]
 pub struct SvgOptions {
     margin: f64,
-    unit: f64,
+    unit: u8,
     foreground: String,
     background: String,
     scale_x_matrix: Vec<u8>, // scale x 0-200%
@@ -71,7 +71,7 @@ impl SvgOptions {
     pub fn new() -> Self {
         SvgOptions {
             margin: 2.0,
-            unit: 1.0,
+            unit: 1,
             foreground: "#000".into(),
             background: "#fff".into(),
             scale_x_matrix: Vec::new(),
@@ -85,7 +85,7 @@ impl SvgOptions {
         self.margin = margin;
         self
     }
-    pub fn unit(mut self, unit: f64) -> SvgOptions {
+    pub fn unit(mut self, unit: u8) -> SvgOptions {
         self.unit = unit;
         self
     }
@@ -184,7 +184,7 @@ pub fn get_svg(
         Err(e) => return Err(e),
     };
 
-    let builder = SvgBuilder::new(&matrix)
+    let render = RenderData::new(&matrix)
         .foreground(svg_options.foreground)
         .background(svg_options.background)
         .scale_x_matrix(svg_options.scale_x_matrix)
@@ -193,7 +193,7 @@ pub fn get_svg(
         .toggle_options(svg_options.toggle_options);
 
     Ok(SvgResult {
-        svg: builder.render_svg(),
+        svg: render_svg(&render),
         mode: matrix.mode,
         ecl: matrix.ecl,
         version: matrix.version,

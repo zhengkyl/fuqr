@@ -1,165 +1,65 @@
-use std::rc::Rc;
+use super::{RenderData, Toggle};
+use crate::matrix::QrMatrix;
 
-use crate::matrix::{Matrix, QrMatrix};
+pub fn render_svg(render: &RenderData) -> String {
+    let unit_width = render.matrix.width() as f64 * render.unit as f64;
+    let unit_height = render.matrix.height() as f64 * render.unit as f64;
 
-#[cfg(feature = "wasm")]
-use wasm_bindgen::prelude::*;
+    // TODO better initial capacity
+    // guestimate, roughly half of pixels are black
+    let mut output = String::with_capacity(40 * render.matrix.width() * render.matrix.height() / 2);
+    output.push_str(&format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}">"#,
+        unit_width, unit_height
+    ));
 
-pub struct SvgBuilder<'a> {
-    matrix: &'a Matrix,
-    unit: f64,
-    foreground: String,
-    background: String,
-    scale_x_matrix: Rc<Vec<u8>>, // scale x 0-200%
-    scale_y_matrix: Rc<Vec<u8>>, // scale y 0-200%
-    toggle_options: u8,
-}
-
-#[cfg_attr(feature = "wasm", wasm_bindgen)]
-pub enum Toggle {
-    Background,
-    BackgroundPixels,
-    ForegroundPixels,
-}
-
-impl<'a> SvgBuilder<'a> {
-    pub fn new(matrix: &'a Matrix) -> Self {
-        let scale_x_matrix = Rc::new(vec![100; matrix.width() * matrix.height()]);
-        let scale_y_matrix = scale_x_matrix.clone();
-
-        SvgBuilder {
-            matrix,
-            unit: 1.0,
-            foreground: "#000".into(),
-            background: "#fff".into(),
-            scale_x_matrix,
-            scale_y_matrix,
-            toggle_options: 0,
-        }
-        .toggle(Toggle::Background)
-        .toggle(Toggle::ForegroundPixels)
-    }
-    pub fn unit(mut self, unit: f64) -> Self {
-        self.unit = unit;
-        self
-    }
-    pub fn foreground(mut self, foreground: String) -> SvgBuilder<'a> {
-        self.foreground = foreground;
-        self
-    }
-    pub fn background(mut self, background: String) -> SvgBuilder<'a> {
-        self.background = background;
-        self
-    }
-    pub fn scale_x_matrix(mut self, scale_matrix: Vec<u8>) -> SvgBuilder<'a> {
-        self.scale_x_matrix = Rc::new(scale_matrix);
-        self
-    }
-    pub fn scale_y_matrix(mut self, scale_matrix: Vec<u8>) -> SvgBuilder<'a> {
-        self.scale_y_matrix = Rc::new(scale_matrix);
-        self
-    }
-    pub fn scale_matrix(mut self, scale_matrix: Vec<u8>) -> SvgBuilder<'a> {
-        self.scale_x_matrix = Rc::new(scale_matrix);
-        self.scale_y_matrix = Rc::clone(&self.scale_x_matrix);
-        self
-    }
-    pub fn toggle_options(mut self, toggle_options: u8) -> SvgBuilder<'a> {
-        self.toggle_options = toggle_options;
-        self
-    }
-    pub fn toggle(mut self, toggle: Toggle) -> SvgBuilder<'a> {
-        self.toggle_options ^= 1 << toggle as u8;
-        self
-    }
-    pub fn get(&self, option: Toggle) -> bool {
-        (self.toggle_options >> option as u8) & 1 == 1
-    }
-
-    pub fn render_svg(&self) -> String {
-        let unit_width = self.matrix.width() as f64 * self.unit;
-        let unit_height = self.matrix.height() as f64 * self.unit;
-
-        // TODO better initial capacity
-        // guestimate, roughly half of pixels are black
-        let mut result = String::with_capacity(40 * self.matrix.width() * self.matrix.height() / 2);
-        result.push_str(&format!(
-            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}">"#,
-            unit_width, unit_height
+    if render.get(Toggle::Background) {
+        output.push_str(&format!(
+            r#"<rect width="{}" height="{}" fill="{}"/>"#,
+            unit_width, unit_height, render.background
         ));
+    }
 
-        if self.get(Toggle::Background) {
-            result.push_str(&format!(
-                r#"<rect width="{}" height="{}" fill="{}"/>"#,
-                unit_width, unit_height, self.background
+    if render.get(Toggle::BackgroundPixels) {
+        render_pixels(render, &mut output, false);
+    }
+
+    if render.get(Toggle::ForegroundPixels) {
+        render_pixels(render, &mut output, true);
+    }
+
+    output.push_str("</svg>");
+
+    output
+}
+
+fn render_pixels(render: &RenderData, output: &mut String, on: bool) {
+    output.push_str(&format!("<path fill=\"{}\" d=\"", render.foreground));
+
+    for y in 0..render.matrix.height() {
+        for x in 0..render.matrix.width() {
+            let x_scale = render.scale_x_matrix[y * render.matrix.width() + x];
+            let y_scale = render.scale_y_matrix[y * render.matrix.width() + x];
+
+            let module_type = render.matrix.get(x, y);
+
+            if (module_type as u8 & 1 != on as u8) || x_scale == 0 || y_scale == 0 {
+                continue;
+            }
+
+            let x_module_size = (x_scale as f64) / 100.0 * render.unit as f64;
+            let y_module_size = (y_scale as f64) / 100.0 * render.unit as f64;
+
+            // keep module centered if size != unit
+            output.push_str(&format!(
+                "M{},{}h{}v{}h-{}z",
+                x as f64 * render.unit as f64 + (render.unit as f64 - x_module_size) / 2.0,
+                y as f64 * render.unit as f64 + (render.unit as f64 - y_module_size) / 2.0,
+                x_module_size,
+                y_module_size,
+                x_module_size
             ));
         }
-
-        if self.get(Toggle::BackgroundPixels) {
-            result.push_str(&format!("<path fill=\"{}\" d=\"", self.background));
-            for y in 0..self.matrix.height() {
-                for x in 0..self.matrix.width() {
-                    let x_scale = self.scale_x_matrix[y * self.matrix.width() + x];
-                    let y_scale = self.scale_y_matrix[y * self.matrix.width() + x];
-
-                    let module_type = self.matrix.get(x, y);
-
-                    // skip ON modules
-                    if (module_type as u8 & 1 == 1) || x_scale == 0 || y_scale == 0 {
-                        continue;
-                    }
-
-                    let x_module_size = (x_scale as f64) / 100.0 * self.unit;
-                    let y_module_size = (y_scale as f64) / 100.0 * self.unit;
-
-                    // keep module centered if size != scale
-                    result.push_str(&format!(
-                        "M{},{}h{}v{}h-{}z",
-                        x as f64 * self.unit + (self.unit - x_module_size) / 2.0,
-                        y as f64 * self.unit + (self.unit - y_module_size) / 2.0,
-                        x_module_size,
-                        y_module_size,
-                        x_module_size
-                    ));
-                }
-            }
-            result.push_str("\"/>");
-        }
-
-        if self.get(Toggle::ForegroundPixels) {
-            result.push_str(&format!("<path fill=\"{}\" d=\"", self.foreground));
-
-            for y in 0..self.matrix.height() {
-                for x in 0..self.matrix.width() {
-                    let x_scale = self.scale_x_matrix[y * self.matrix.width() + x];
-                    let y_scale = self.scale_y_matrix[y * self.matrix.width() + x];
-
-                    let module_type = self.matrix.get(x, y);
-
-                    // skip OFF modules
-                    if (module_type as u8 & 1 == 0) || x_scale == 0 || y_scale == 0 {
-                        continue;
-                    }
-
-                    let x_module_size = (x_scale as f64) / 100.0 * self.unit;
-                    let y_module_size = (y_scale as f64) / 100.0 * self.unit;
-
-                    // keep module centered if size != scale
-                    result.push_str(&format!(
-                        "M{},{}h{}v{}h-{}z",
-                        x as f64 * self.unit + (self.unit - x_module_size) / 2.0,
-                        y as f64 * self.unit + (self.unit - y_module_size) / 2.0,
-                        x_module_size,
-                        y_module_size,
-                        x_module_size
-                    ));
-                }
-            }
-            result.push_str("\"/>");
-        }
-
-        result.push_str("</svg>");
-
-        result
     }
+    output.push_str("\"/>");
 }

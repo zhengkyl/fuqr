@@ -15,8 +15,12 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 console_error_panic_hook = { version = "0.1.7", optional = true }
 js-sys = { version = "0.3.69", optional = true }
+resvg = "0.42.0"
 wasm-bindgen = { version = "0.2.92", optional = true }
 wee_alloc = { version = "0.4.5", optional = true }
+
+[dev-dependencies]
+image = "0.25.1"
 
 [profile.release]
 lto = true
