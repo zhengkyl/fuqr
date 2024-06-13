@@ -36,13 +36,48 @@ fn circle(matrix: &Matrix) -> Result<(), ImageError> {
         image::ImageBuffer::from_raw(render.width(), render.height(), render_image(&render))
             .unwrap();
 
-    buf.save("tmp/debug.png")?;
+    buf.save("tmp/scale_circle.png")?;
 
     Ok(())
 }
 
-fn gif(matrix: &Matrix) -> Result<(), ImageError> {
-    let out = File::create("tmp/waves.gif")?;
+fn stripes(matrix: &Matrix) -> Result<(), ImageError> {
+    let out = File::create("tmp/scale_stripes.gif")?;
+    let mut encoder = GifEncoder::new(out);
+    encoder.set_repeat(image::codecs::gif::Repeat::Infinite)?;
+
+    let period = 100;
+    let middle = period / 2;
+
+    for j in 0..50 {
+        let mut v = vec![100; matrix.width() * matrix.height()];
+        for y in 0..matrix.height() {
+            for x in 0..matrix.width() {
+                let index = (x + y) as isize;
+
+                let pos = isize::abs(middle as isize - ((index * 5 + (j * 2)) % period) as isize);
+
+                let s = 150 - 2 * pos;
+                v[y * matrix.width() + x] = s as u8;
+            }
+        }
+        // By default unit = 1, meaning 1 pixel per qr code pixel
+        let render = RenderData::new(&matrix).unit(10).scale_matrix(Some(&v));
+
+        let buf: image::ImageBuffer<Rgba<u8>, Vec<u8>> =
+            image::ImageBuffer::from_raw(render.width(), render.height(), render_image(&render))
+                .unwrap();
+
+        // gifs are limited to 50fps, any higher and it resets to 10fps
+        let frame = Frame::from_parts(buf, 0, 0, Delay::from_numer_denom_ms(1000, 30));
+        encoder.encode_frame(frame)?;
+    }
+
+    Ok(())
+}
+
+fn waves(matrix: &Matrix) -> Result<(), ImageError> {
+    let out = File::create("tmp/scale_waves.gif")?;
     let mut encoder = GifEncoder::new(out);
     encoder.set_repeat(image::codecs::gif::Repeat::Infinite)?;
 
@@ -81,7 +116,7 @@ fn gif(matrix: &Matrix) -> Result<(), ImageError> {
     Ok(())
 }
 
-fn main() {
+fn main() -> Result<(), ImageError> {
     let data = Data::new(
         "https://github.com/zhengkyl/fuqr",
         Mode::Byte,
@@ -91,11 +126,13 @@ fn main() {
 
     let data = match data {
         Some(x) => x,
-        None => return,
+        None => return Ok(()),
     };
     let matrix = Matrix::new(data, None, Margin::new(2));
 
-    circle(&matrix);
+    circle(&matrix)?;
+    stripes(&matrix)?;
+    waves(&matrix)?;
 
-    // gif(&matrix)
+    Ok(())
 }

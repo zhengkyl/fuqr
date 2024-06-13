@@ -1,6 +1,6 @@
 # fuqr
 
-feeling underappreciated qr codes
+freaking unbelievable qr codes
 
 ## Examples
 
@@ -14,9 +14,9 @@ Scaling modules based on position.
 
 ### `/examples/weave.rs`
 
-Achieve interesting aesthetic by deviating from pixel grid.
+No need to stick to a boring pixel grid.
 
-| Thick                                | Thin                               | GIF                                    |
+| Thick                                | Thin                               | Diagonal                               |
 | ------------------------------------ | ---------------------------------- | -------------------------------------- |
 | ![thick](./examples/weave_thick.png) | ![thin](./examples/weave_thin.png) | ![diagonal](./examples/weave_diag.png) |
 
@@ -27,3 +27,7 @@ https://www.thonky.com/qr-code-tutorial/
 https://github.com/erwanvivien/fast_qr
 
 https://github.com/unjs/uqr
+
+http://vecg.cs.ucl.ac.uk/Projects/SmartGeometry/halftone_QR/halftoneQR_sigga13.html
+
+https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphics/MQRC
