@@ -20,6 +20,13 @@ No need to stick to a boring pixel grid.
 | ------------------------------------ | ---------------------------------- | -------------------------------------- |
 | ![thick](./examples/weave_thick.png) | ![thin](./examples/weave_thin.png) | ![diagonal](./examples/weave_diag.png) |
 
+### Misc bugs and experiments
+
+| Have                                        | Some                                      | More                            |
+| ------------------------------------------- | ----------------------------------------- | ------------------------------- |
+| ![bathroom](./examples/misc/bathroom.png)   | ![diamonds](./examples/misc/diamonds.gif) | ![mmm](./examples/misc/mmm.png) |
+| ![mountains](./examples/misc/mountains.png) | ![diamonds](./examples/misc/zebra.gif)    |                                 |
+
 ## references
 
 https://www.thonky.com/qr-code-tutorial/
