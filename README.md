@@ -1,8 +1,10 @@
 # fuqr
 
-freaking unbelievable qr codes
+financially unrecoverable qr codes
 
 ## Examples
+
+All example code is WIP and in a very unpolished state.
 
 ### `/examples/scale.rs`
 
@@ -20,6 +22,16 @@ No need to stick to a boring pixel grid.
 | ------------------------------------ | ---------------------------------- | -------------------------------------- |
 | ![thick](./examples/weave_thick.png) | ![thin](./examples/weave_thin.png) | ![diagonal](./examples/weave_diag.png) |
 
+### `/examples/layers.rs`
+
+Layering is neat, but it can seriously degrade scanning ability if done without care.
+
+See [Halftone QR Codes](http://vecg.cs.ucl.ac.uk/Projects/SmartGeometry/halftone_QR/halftoneQR_sigga13.html), [Micrography QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphics/MQRC), [Amazing QR](https://github.com/x-hw/amazing-qr) for more thoughtful implementations with high scannability.
+
+| Background                                      | Minamalist                         | Maximize scannability                       |
+| ----------------------------------------------- | ---------------------------------- | -------------------------------------- |
+| ![background](./examples/layers_background.png) | ![thin](./examples/layers_min.gif) | ![diagonal](./examples/layers_max.gif) |
+
 ### Misc bugs and experiments
 
 | Have                                        | Some                                      | More                            |
@@ -27,14 +39,10 @@ No need to stick to a boring pixel grid.
 | ![bathroom](./examples/misc/bathroom.png)   | ![diamonds](./examples/misc/diamonds.gif) | ![mmm](./examples/misc/mmm.png) |
 | ![mountains](./examples/misc/mountains.png) | ![diamonds](./examples/misc/zebra.gif)    |                                 |
 
-## references
-
-https://www.thonky.com/qr-code-tutorial/
-
-https://github.com/erwanvivien/fast_qr
-
-https://github.com/unjs/uqr
-
-http://vecg.cs.ucl.ac.uk/Projects/SmartGeometry/halftone_QR/halftoneQR_sigga13.html
-
-https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphics/MQRC
+## Other
+- Great QR code generator tutorial
+  - https://www.thonky.com/qr-code-tutorial/
+- Reference implementations
+  - https://github.com/erwanvivien/fast_qr
+  - https://github.com/unjs/uqr
+  - https://github.com/zxing/zxing

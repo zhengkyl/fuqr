@@ -1,0 +1,203 @@
+use std::{fs::File, io::BufReader};
+
+use fuqr::{
+    data::Data,
+    matrix::{Margin, Matrix, Module, QrMatrix},
+    qrcode::{Mode, Version, ECL},
+};
+use image::{
+    codecs::gif::{GifDecoder, GifEncoder},
+    imageops::{self, FilterType},
+    AnimationDecoder, Delay, DynamicImage, Frame, GenericImage, GenericImageView, ImageBuffer,
+    ImageError, Rgba,
+};
+
+fn overlay(
+    matrix: &Matrix,
+    gif_path: &str,
+    out_path: &str,
+    pixel_size: u32,
+    bg_cover_size: u32,
+    fg_cover_size: u32,
+) -> Result<(), ImageError> {
+    let width = matrix.width() as u32 * pixel_size;
+    let height = matrix.height() as u32 * pixel_size;
+
+    let out = File::create(out_path)?;
+    let mut encoder = GifEncoder::new(out);
+    encoder.set_repeat(image::codecs::gif::Repeat::Infinite)?;
+
+    let overlay = BufReader::new(File::open(gif_path)?);
+    let decoder = GifDecoder::new(overlay)?;
+    let o_frames = decoder.into_frames();
+
+    for o_frame in o_frames {
+        let mut img_buf = ImageBuffer::from_pixel(width, height, Rgba([255, 255, 255, 255]));
+        if bg_cover_size > 0 {
+            img_buf = draw_qr(
+                DynamicImage::ImageRgba8(img_buf),
+                matrix,
+                pixel_size,
+                bg_cover_size,
+            )?
+            .to_rgba8();
+        }
+        let o_frame = o_frame.unwrap();
+
+        let ratio = o_frame.buffer().width() as f64 / o_frame.buffer().height() as f64;
+        let o_width = (height as f64 * ratio) as u32;
+        let o_frame = imageops::resize(o_frame.buffer(), o_width, height, FilterType::Nearest);
+
+        imageops::overlay(
+            &mut img_buf,
+            &o_frame,
+            (width as i64 - o_width as i64) / 2,
+            0,
+        );
+
+        if fg_cover_size > 0 {
+            img_buf = draw_qr(
+                DynamicImage::ImageRgba8(img_buf),
+                matrix,
+                pixel_size,
+                fg_cover_size,
+            )?
+            .to_rgba8();
+        }
+
+        let frame = Frame::from_parts(img_buf, 0, 0, Delay::from_numer_denom_ms(1000, 6));
+        encoder.encode_frame(frame)?;
+    }
+
+    Ok(())
+}
+
+fn background(matrix: &Matrix) -> Result<(), ImageError> {
+    let img = image::open("examples/misc/jeancarloemer.jpg")?;
+    let pixel_size = 6;
+    let img = img
+        .resize(
+            matrix.width() as u32 * pixel_size,
+            matrix.height() as u32 * pixel_size,
+            // Nearest is fastest and noisiest resize filter
+            FilterType::Nearest,
+        )
+        .grayscale();
+
+    let img = draw_qr(img, matrix, pixel_size, 2)?;
+    img.save("tmp/layers_background.png")?;
+
+    Ok(())
+}
+
+fn draw_qr(
+    mut img: DynamicImage,
+    matrix: &Matrix,
+    pixel_size: u32,
+    cover_size: u32,
+) -> Result<DynamicImage, ImageError> {
+    assert_eq!(matrix.width() as u32 * pixel_size, img.width());
+    assert_eq!(matrix.height() as u32 * pixel_size, img.height());
+
+    let gap = (pixel_size - cover_size) / 2;
+
+    let luma = img
+        .resize(
+            matrix.width() as u32,
+            matrix.height() as u32,
+            FilterType::Nearest,
+        )
+        .grayscale();
+
+    for y in 0..matrix.height() {
+        for x in 0..matrix.width() {
+            let module = matrix.get(x, y);
+            if module == Module::Unset {
+                continue;
+            }
+            let pixel = if module.is_on() {
+                [0, 0, 0, 255]
+            } else {
+                [255, 255, 255, 255]
+            };
+
+            if module == Module::FinderON || module == Module::FinderOFF {
+                for dy in 0..pixel_size {
+                    for dx in 0..pixel_size {
+                        img.put_pixel(
+                            x as u32 * pixel_size + dx,
+                            y as u32 * pixel_size + dy,
+                            image::Rgba(pixel),
+                        )
+                    }
+                }
+            }
+            // QR code scanners use local blackpoint thresholds,
+            // or at least a global blackpoint based on image heuristics
+            // We'll keep things simple
+            let l = luma.get_pixel(x as u32, y as u32).0[0];
+            if (module.is_on() && l > 200) && (!module.is_on() && l < 50) {
+                continue;
+            }
+
+            for dy in 0..cover_size {
+                for dx in 0..cover_size {
+                    img.put_pixel(
+                        x as u32 * pixel_size + dx + gap,
+                        y as u32 * pixel_size + dy + gap,
+                        image::Rgba(pixel),
+                    )
+                }
+            }
+        }
+    }
+
+    Ok(img)
+}
+
+fn main() -> Result<(), ImageError> {
+    let data = Data::new(
+        "https://github.com/zhengkyl/fuqr",
+        Mode::Byte,
+        Version(1),
+        ECL::High,
+    );
+
+    let data = match data {
+        Some(x) => x,
+        None => return Ok(()),
+    };
+    let mut matrix = Matrix::new(data, None, Margin::new(2));
+
+    overlay(
+        &matrix,
+        "examples/misc/spin.gif",
+        "tmp/layers_min.gif",
+        6,
+        3,
+        0,
+    )?;
+
+    overlay(
+        &matrix,
+        "examples/misc/4floss.gif",
+        "tmp/layers_max.gif",
+        6,
+        6,
+        0,
+    )?;
+
+    // Add quiet zone
+    for x in matrix.margin.left - 1..matrix.width() - matrix.margin.right + 1 {
+        matrix.set(x, matrix.margin.top - 1, Module::FinderOFF);
+        matrix.set(x, matrix.height() - matrix.margin.bottom, Module::FinderOFF);
+    }
+    for y in matrix.margin.top - 1..matrix.height() - matrix.margin.bottom + 1 {
+        matrix.set(matrix.margin.left - 1, y, Module::FinderOFF);
+        matrix.set(matrix.width() - matrix.margin.right, y, Module::FinderOFF);
+    }
+
+    background(&matrix)?;
+
+    Ok(())
+}

@@ -33,6 +33,9 @@ pub enum Module {
     VersionOFF,
     VersionON,
 
+    SeparatorOFF,
+    SeparatorON,
+
     Unset,
 }
 
@@ -298,7 +301,7 @@ pub trait QrMatrix {
                 self,
                 self.margin().left + i,
                 self.margin().top + 7,
-                Module::FinderOFF,
+                Module::SeparatorOFF,
             );
         }
         for i in 0..7 {
@@ -306,7 +309,7 @@ pub trait QrMatrix {
                 self,
                 self.margin().left + 7,
                 self.margin().top + i,
-                Module::FinderOFF,
+                Module::SeparatorOFF,
             );
         }
 
@@ -320,7 +323,7 @@ pub trait QrMatrix {
                 self,
                 self.margin().left + i,
                 self.margin().top + self.qr_width() - 8,
-                Module::FinderOFF,
+                Module::SeparatorOFF,
             );
         }
         for i in 0..7 {
@@ -328,7 +331,7 @@ pub trait QrMatrix {
                 self,
                 self.margin().left + 7,
                 self.margin().top + self.qr_width() - 1 - i,
-                Module::FinderOFF,
+                Module::SeparatorOFF,
             );
         }
 
@@ -342,7 +345,7 @@ pub trait QrMatrix {
                 self,
                 self.margin().left + self.qr_width() - 1 - i,
                 self.margin().top + 7,
-                Module::FinderOFF,
+                Module::SeparatorOFF,
             );
         }
         for i in 0..7 {
@@ -350,7 +353,7 @@ pub trait QrMatrix {
                 self,
                 self.margin().left + self.qr_width() - 8,
                 self.margin().top + i,
-                Module::FinderOFF,
+                Module::SeparatorOFF,
             );
         }
     }
