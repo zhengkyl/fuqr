@@ -8,21 +8,41 @@ use fuqr::{
 };
 use image::{codecs::gif::GifEncoder, Delay, Frame, ImageError, Rgba};
 
-fn main() -> Result<(), ImageError> {
-    let data = Data::new(
-        "https://github.com/zhengkyl/fuqr",
-        Mode::Byte,
-        Version(1),
-        ECL::High,
-    );
+fn circle(matrix: &Matrix) -> Result<(), ImageError> {
+    let center_x = matrix.width() / 2;
+    let center_y = matrix.height() / 2;
 
-    let data = match data {
-        Some(x) => x,
-        None => return Ok(()),
-    };
-    let matrix = Matrix::new(data, None, Margin::new(2));
+    let max_size = 150;
+    let min_size = 30;
+    let max_dist = f64::sqrt(center_x as f64 * center_x as f64 + center_y as f64 + center_y as f64);
+    let per_dist = (max_size - min_size) as f64 / max_dist as f64;
 
-    let out = File::create("waves.gif")?;
+    let mut v = vec![100; matrix.width() * matrix.height()];
+    for y in 0..matrix.height() {
+        for x in 0..matrix.width() {
+            let dx = isize::abs(x as isize - (center_x as isize)) as f64;
+            let dy = isize::abs(y as isize - (center_y as isize)) as f64;
+            let dist = f64::sqrt(dx * dx + dy * dy);
+
+            let size = per_dist * dist;
+
+            v[y * matrix.width() + x] = size as u8 + min_size;
+        }
+    }
+    // By default unit = 1, meaning 1 pixel per qr code pixel
+    let render = RenderData::new(&matrix).unit(10).scale_matrix(Some(&v));
+
+    let buf: image::ImageBuffer<Rgba<u8>, Vec<u8>> =
+        image::ImageBuffer::from_raw(render.width(), render.height(), render_image(&render))
+            .unwrap();
+
+    buf.save("tmp/debug.png")?;
+
+    Ok(())
+}
+
+fn gif(matrix: &Matrix) -> Result<(), ImageError> {
+    let out = File::create("tmp/waves.gif")?;
     let mut encoder = GifEncoder::new(out);
     encoder.set_repeat(image::codecs::gif::Repeat::Infinite)?;
 
@@ -35,19 +55,19 @@ fn main() -> Result<(), ImageError> {
         let mut v = vec![100; matrix.width() * matrix.height()];
         for y in 0..matrix.height() {
             for x in 0..matrix.width() {
-                let index = (matrix.width() + matrix.height() - (x + y)) as isize;
+                let index = (x + y) as isize;
                 let offset_x = isize::abs(x_middle - (x as isize % x_period));
 
                 let pos = isize::abs(
                     middle as isize - (((index + offset_x) * 3 + (j * 2)) % period) as isize,
                 );
 
-                let s = 200 - 3 * pos;
+                let s = 180 - 2 * pos;
                 v[y * matrix.width() + x] = s as u8;
             }
         }
         // By default unit = 1, meaning 1 pixel per qr code pixel
-        let render = RenderData::new(&matrix).unit(10).scale_matrix(v);
+        let render = RenderData::new(&matrix).unit(10).scale_matrix(Some(&v));
 
         let buf: image::ImageBuffer<Rgba<u8>, Vec<u8>> =
             image::ImageBuffer::from_raw(render.width(), render.height(), render_image(&render))
@@ -59,4 +79,23 @@ fn main() -> Result<(), ImageError> {
     }
 
     Ok(())
+}
+
+fn main() {
+    let data = Data::new(
+        "https://github.com/zhengkyl/fuqr",
+        Mode::Byte,
+        Version(1),
+        ECL::High,
+    );
+
+    let data = match data {
+        Some(x) => x,
+        None => return,
+    };
+    let matrix = Matrix::new(data, None, Margin::new(2));
+
+    circle(&matrix);
+
+    // gif(&matrix)
 }

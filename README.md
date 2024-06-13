@@ -1,14 +1,24 @@
 # fuqr
 
-free underwater qr codes
+feeling underappreciated qr codes
 
 ## Examples
 
-### Scaling individual modules
+### `/examples/scale.rs`
 
-| Barbershop pole | Waves | More waves |
-| -- | -- | -- |
-| ![ripple](./examples/ripple.gif) | ![waves](./examples/waves.gif)| ![calm waves](./examples/waves2.gif)|
+Scaling modules based on position.
+
+| Circle                                 | Stripes                                  | Waves                                |
+| -------------------------------------- | ---------------------------------------- | ------------------------------------ |
+| ![circle](./examples/scale_circle.png) | ![stripes](./examples/scale_stripes.gif) | ![waves](./examples/scale_waves.gif) |
+
+### `/examples/weave.rs`
+
+Achieve interesting aesthetic by deviating from pixel grid.
+
+| Thick                                | Thin                               | GIF                                    |
+| ------------------------------------ | ---------------------------------- | -------------------------------------- |
+| ![thick](./examples/weave_thick.png) | ![thin](./examples/weave_thin.png) | ![diagonal](./examples/weave_diag.png) |
 
 ## references
 

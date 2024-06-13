@@ -56,12 +56,12 @@ impl QrOptions {
 
 #[wasm_bindgen]
 pub struct SvgOptions {
-    margin: f64,
     unit: u8,
     foreground: String,
     background: String,
-    scale_x_matrix: Vec<u8>, // scale x 0-200%
-    scale_y_matrix: Vec<u8>, // scale y 0-200%
+    scale_x_matrix: Option<Vec<u8>>, // scale x 0-200%
+    scale_y_matrix: Option<Vec<u8>>, // scale y 0-200%
+    scale_matrix: Option<Vec<u8>>,   // both x and y
     toggle_options: u8,
 }
 
@@ -70,20 +70,16 @@ impl SvgOptions {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         SvgOptions {
-            margin: 2.0,
             unit: 1,
             foreground: "#000".into(),
             background: "#fff".into(),
-            scale_x_matrix: Vec::new(),
-            scale_y_matrix: Vec::new(),
+            scale_x_matrix: None,
+            scale_y_matrix: None,
+            scale_matrix: None,
             toggle_options: 0,
         }
         .toggle(Toggle::Background)
         .toggle(Toggle::ForegroundPixels)
-    }
-    pub fn margin(mut self, margin: f64) -> SvgOptions {
-        self.margin = margin;
-        self
     }
     pub fn unit(mut self, unit: u8) -> SvgOptions {
         self.unit = unit;
@@ -97,18 +93,31 @@ impl SvgOptions {
         self.background = background;
         self
     }
-    pub fn scale_x_matrix(mut self, scale_matrix: Vec<u8>) -> SvgOptions {
-        self.scale_x_matrix = scale_matrix;
+    pub fn scale_x_matrix(mut self, scale_x_matrix: Option<Vec<u8>>) -> SvgOptions {
+        self.scale_x_matrix = scale_x_matrix;
+
+        if let Some(scale_matrix) = self.scale_matrix {
+            self.scale_y_matrix = Some(scale_matrix);
+            self.scale_matrix = None;
+        }
+
         self
     }
-    pub fn scale_y_matrix(mut self, scale_matrix: Vec<u8>) -> SvgOptions {
-        self.scale_y_matrix = scale_matrix;
+    pub fn scale_y_matrix(mut self, scale_y_matrix: Option<Vec<u8>>) -> SvgOptions {
+        self.scale_y_matrix = scale_y_matrix;
+
+        if let Some(scale_matrix) = self.scale_matrix {
+            self.scale_x_matrix = Some(scale_matrix);
+            self.scale_matrix = None;
+        }
+
         self
     }
-    pub fn scale_matrix(mut self, scale_matrix: Vec<u8>) -> SvgOptions {
-        // I don't think it's worth worrying about, esp b/c >99% qrcodes are small
-        self.scale_x_matrix = scale_matrix;
-        self.scale_y_matrix = self.scale_x_matrix.clone();
+    // can't pass refs from js, so we juggle scale_matrix
+    pub fn scale_matrix(mut self, scale_matrix: Option<Vec<u8>>) -> SvgOptions {
+        self.scale_matrix = scale_matrix;
+        self.scale_x_matrix = None;
+        self.scale_y_matrix = None;
         self
     }
     pub fn toggle(mut self, toggle: Toggle) -> SvgOptions {
@@ -167,9 +176,6 @@ pub fn get_matrix(input: &str, qr_options: QrOptions) -> Result<Matrix, QrError>
     Ok(matrix)
 }
 
-// TODO dear kyle, basically do this for everything
-pub fn iterate_timing(matrix: Matrix, f: js_sys::Function) {}
-
 #[wasm_bindgen]
 pub fn get_svg(
     input: &str,
@@ -187,8 +193,9 @@ pub fn get_svg(
     let render = RenderData::new(&matrix)
         .foreground(svg_options.foreground)
         .background(svg_options.background)
-        .scale_x_matrix(svg_options.scale_x_matrix)
-        .scale_y_matrix(svg_options.scale_y_matrix)
+        .scale_x_matrix(svg_options.scale_x_matrix.as_ref())
+        .scale_y_matrix(svg_options.scale_y_matrix.as_ref())
+        .scale_matrix(svg_options.scale_matrix.as_ref())
         .unit(svg_options.unit)
         .toggle_options(svg_options.toggle_options);
 

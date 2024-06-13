@@ -36,6 +36,12 @@ pub enum Module {
     Unset,
 }
 
+impl Module {
+    pub fn is_on(self) -> bool {
+        (self as u8 & 1) == 1
+    }
+}
+
 impl BitOr<u8> for Module {
     type Output = Module;
     fn bitor(self, rhs: u8) -> Self::Output {

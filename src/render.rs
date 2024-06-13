@@ -3,20 +3,18 @@ pub mod svg;
 #[cfg(feature = "text")]
 pub mod text;
 
-use std::rc::Rc;
-
 use crate::matrix::{Matrix, QrMatrix};
 
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
-pub struct RenderData<'a> {
-    matrix: &'a Matrix,
+pub struct RenderData<'m, 'x, 'y> {
+    matrix: &'m Matrix,
+    scale_x_matrix: Option<&'x Vec<u8>>, // scale x 0-200%
+    scale_y_matrix: Option<&'y Vec<u8>>, // scale y 0-200%
     unit: u8,
     foreground: String,
     background: String,
-    scale_x_matrix: Rc<Vec<u8>>, // scale x 0-200%
-    scale_y_matrix: Rc<Vec<u8>>, // scale y 0-200%
     toggle_options: u8,
 }
 
@@ -27,18 +25,15 @@ pub enum Toggle {
     ForegroundPixels,
 }
 
-impl<'a> RenderData<'a> {
-    pub fn new(matrix: &'a Matrix) -> Self {
-        let scale_x_matrix = Rc::new(vec![100; matrix.width() * matrix.height()]);
-        let scale_y_matrix = scale_x_matrix.clone();
-
+impl<'m, 'x, 'y> RenderData<'m, 'x, 'y> {
+    pub fn new(matrix: &'m Matrix) -> Self {
         RenderData {
             matrix,
+            scale_x_matrix: None,
+            scale_y_matrix: None,
             unit: 1,
             foreground: "#000".into(),
             background: "#fff".into(),
-            scale_x_matrix,
-            scale_y_matrix,
             toggle_options: 0,
         }
         .toggle(Toggle::Background)
@@ -54,32 +49,35 @@ impl<'a> RenderData<'a> {
         self.unit = unit;
         self
     }
-    pub fn foreground(mut self, foreground: String) -> RenderData<'a> {
+    pub fn foreground(mut self, foreground: String) -> RenderData<'m, 'x, 'y> {
         self.foreground = foreground;
         self
     }
-    pub fn background(mut self, background: String) -> RenderData<'a> {
+    pub fn background(mut self, background: String) -> RenderData<'m, 'x, 'y> {
         self.background = background;
         self
     }
-    pub fn scale_x_matrix(mut self, scale_matrix: Vec<u8>) -> RenderData<'a> {
-        self.scale_x_matrix = Rc::new(scale_matrix);
+    pub fn scale_x_matrix(mut self, scale_matrix: Option<&'x Vec<u8>>) -> RenderData<'m, 'x, 'y> {
+        self.scale_x_matrix = scale_matrix;
         self
     }
-    pub fn scale_y_matrix(mut self, scale_matrix: Vec<u8>) -> RenderData<'a> {
-        self.scale_y_matrix = Rc::new(scale_matrix);
+    pub fn scale_y_matrix(mut self, scale_matrix: Option<&'y Vec<u8>>) -> RenderData<'m, 'x, 'y> {
+        self.scale_y_matrix = scale_matrix;
         self
     }
-    pub fn scale_matrix(mut self, scale_matrix: Vec<u8>) -> RenderData<'a> {
-        self.scale_x_matrix = Rc::new(scale_matrix);
-        self.scale_y_matrix = Rc::clone(&self.scale_x_matrix);
+    pub fn scale_matrix<'xy: 'x + 'y>(
+        mut self,
+        scale_matrix: Option<&'xy Vec<u8>>,
+    ) -> RenderData<'m, 'x, 'y> {
+        self.scale_x_matrix = scale_matrix;
+        self.scale_y_matrix = scale_matrix;
         self
     }
-    pub fn toggle_options(mut self, toggle_options: u8) -> RenderData<'a> {
+    pub fn toggle_options(mut self, toggle_options: u8) -> RenderData<'m, 'x, 'y> {
         self.toggle_options = toggle_options;
         self
     }
-    pub fn toggle(mut self, toggle: Toggle) -> RenderData<'a> {
+    pub fn toggle(mut self, toggle: Toggle) -> RenderData<'m, 'x, 'y> {
         self.toggle_options ^= 1 << toggle as u8;
         self
     }

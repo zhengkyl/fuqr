@@ -34,12 +34,28 @@ pub fn render_svg(render: &RenderData) -> String {
 }
 
 fn render_pixels(render: &RenderData, output: &mut String, on: bool) {
-    output.push_str(&format!("<path fill=\"{}\" d=\"", render.foreground));
+    output.push_str(&format!(
+        "<path fill=\"{}\" d=\"",
+        if on {
+            &render.foreground
+        } else {
+            &render.background
+        }
+    ));
 
     for y in 0..render.matrix.height() {
         for x in 0..render.matrix.width() {
-            let x_scale = render.scale_x_matrix[y * render.matrix.width() + x];
-            let y_scale = render.scale_y_matrix[y * render.matrix.width() + x];
+            let x_scale = if let Some(scale_matrix) = render.scale_x_matrix {
+                scale_matrix[y * render.matrix.width() + x]
+            } else {
+                100
+            };
+
+            let y_scale = if let Some(scale_matrix) = render.scale_y_matrix {
+                scale_matrix[y * render.matrix.width() + x]
+            } else {
+                100
+            };
 
             let module_type = render.matrix.get(x, y);
 
