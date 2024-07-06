@@ -5,7 +5,6 @@ use crate::{
     encoding::get_encoding_mode,
     matrix::{Margin, Matrix},
     qrcode::{Mask, Mode, Version, ECL},
-    render::{svg::render_svg, RenderData, Toggle},
 };
 
 #[global_allocator]
@@ -18,6 +17,8 @@ pub struct QrOptions {
     mode: Option<Mode>,
     mask: Option<Mask>,
     margin: Margin,
+    strict_version: bool,
+    strict_ecl: bool,
 }
 
 #[wasm_bindgen]
@@ -26,7 +27,9 @@ impl QrOptions {
     pub fn new() -> Self {
         QrOptions {
             min_version: Version(1),
+            strict_version: false,
             min_ecl: ECL::Low,
+            strict_ecl: false,
             mode: None,
             mask: None,
             margin: Margin::new(2),
@@ -52,89 +55,14 @@ impl QrOptions {
         self.margin = margin;
         self
     }
-}
-
-#[wasm_bindgen]
-pub struct SvgOptions {
-    unit: u8,
-    foreground: String,
-    background: String,
-    scale_x_matrix: Option<Vec<u8>>, // scale x 0-200%
-    scale_y_matrix: Option<Vec<u8>>, // scale y 0-200%
-    scale_matrix: Option<Vec<u8>>,   // both x and y
-    toggle_options: u8,
-}
-
-#[wasm_bindgen]
-impl SvgOptions {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> Self {
-        SvgOptions {
-            unit: 1,
-            foreground: "#000".into(),
-            background: "#fff".into(),
-            scale_x_matrix: None,
-            scale_y_matrix: None,
-            scale_matrix: None,
-            toggle_options: 0,
-        }
-        .toggle(Toggle::Background)
-        .toggle(Toggle::ForegroundPixels)
-    }
-    pub fn unit(mut self, unit: u8) -> SvgOptions {
-        self.unit = unit;
+    pub fn strict_version(mut self, strict: bool) -> Self {
+        self.strict_version = strict;
         self
     }
-    pub fn foreground(mut self, foreground: String) -> SvgOptions {
-        self.foreground = foreground;
+    pub fn strict_ecl(mut self, strict: bool) -> Self {
+        self.strict_ecl = strict;
         self
     }
-    pub fn background(mut self, background: String) -> SvgOptions {
-        self.background = background;
-        self
-    }
-    pub fn scale_x_matrix(mut self, scale_x_matrix: Option<Vec<u8>>) -> SvgOptions {
-        self.scale_x_matrix = scale_x_matrix;
-
-        if let Some(scale_matrix) = self.scale_matrix {
-            self.scale_y_matrix = Some(scale_matrix);
-            self.scale_matrix = None;
-        }
-
-        self
-    }
-    pub fn scale_y_matrix(mut self, scale_y_matrix: Option<Vec<u8>>) -> SvgOptions {
-        self.scale_y_matrix = scale_y_matrix;
-
-        if let Some(scale_matrix) = self.scale_matrix {
-            self.scale_x_matrix = Some(scale_matrix);
-            self.scale_matrix = None;
-        }
-
-        self
-    }
-    // can't pass refs from js, so we juggle scale_matrix
-    pub fn scale_matrix(mut self, scale_matrix: Option<Vec<u8>>) -> SvgOptions {
-        self.scale_matrix = scale_matrix;
-        self.scale_x_matrix = None;
-        self.scale_y_matrix = None;
-        self
-    }
-    pub fn toggle(mut self, toggle: Toggle) -> SvgOptions {
-        self.toggle_options ^= 1 << toggle as u8;
-        self
-    }
-}
-
-#[wasm_bindgen]
-pub struct SvgResult {
-    #[wasm_bindgen(getter_with_clone)]
-    pub svg: String,
-    // These may not match input, so return final values
-    pub mode: Mode,
-    pub ecl: ECL,
-    pub version: Version,
-    pub mask: Mask,
 }
 
 #[cfg(feature = "wasm")]
@@ -164,7 +92,14 @@ pub fn get_matrix(input: &str, qr_options: QrOptions) -> Result<Matrix, QrError>
         mode = get_encoding_mode(input);
     }
 
-    let data = Data::new(input, mode, qr_options.min_version, qr_options.min_ecl);
+    let data = Data::new_verbose(
+        input,
+        mode,
+        qr_options.min_version,
+        qr_options.strict_version,
+        qr_options.min_ecl,
+        qr_options.strict_ecl,
+    );
 
     let data = match data {
         Some(x) => x,
@@ -174,36 +109,4 @@ pub fn get_matrix(input: &str, qr_options: QrOptions) -> Result<Matrix, QrError>
     let matrix = Matrix::new(data, qr_options.mask, qr_options.margin);
 
     Ok(matrix)
-}
-
-#[wasm_bindgen]
-pub fn get_svg(
-    input: &str,
-    qr_options: QrOptions,
-    svg_options: SvgOptions,
-) -> Result<SvgResult, QrError> {
-    #[cfg(feature = "console_error_panic_hook")]
-    console_error_panic_hook::set_once();
-
-    let matrix = match get_matrix(input, qr_options) {
-        Ok(m) => m,
-        Err(e) => return Err(e),
-    };
-
-    let render = RenderData::new(&matrix)
-        .foreground(svg_options.foreground)
-        .background(svg_options.background)
-        .scale_x_matrix(svg_options.scale_x_matrix.as_ref())
-        .scale_y_matrix(svg_options.scale_y_matrix.as_ref())
-        .scale_matrix(svg_options.scale_matrix.as_ref())
-        .unit(svg_options.unit)
-        .toggle_options(svg_options.toggle_options);
-
-    Ok(SvgResult {
-        svg: render_svg(&render),
-        mode: matrix.mode,
-        ecl: matrix.ecl,
-        version: matrix.version,
-        mask: matrix.mask,
-    })
 }

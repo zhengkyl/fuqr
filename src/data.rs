@@ -14,6 +14,17 @@ pub struct Data {
 
 impl Data {
     pub fn new(text: &str, mode: Mode, min_version: Version, min_ecl: ECL) -> Option<Self> {
+        Self::new_verbose(text, mode, min_version, false, min_ecl, false)
+    }
+
+    pub fn new_verbose(
+        text: &str,
+        mode: Mode,
+        min_version: Version,
+        strict_version: bool,
+        min_ecl: ECL,
+        strict_ecl: bool,
+    ) -> Option<Self> {
         let mut bits = 0;
         bits += 4 + bits_char_count_indicator(min_version, mode);
         let char_len = text.len();
@@ -43,6 +54,10 @@ impl Data {
             > (data_codewords - NUM_EC_CODEWORDS[min_version][min_ecl as usize] as usize)
             && min_version < 40
         {
+            if strict_version {
+                return None
+            }
+
             min_version += 1;
 
             data_codewords = (NUM_DATA_MODULES[min_version] / 8) as usize;
@@ -68,12 +83,14 @@ impl Data {
 
         let mut max_ecl = min_ecl;
 
-        // this is literally to avoid having to impl TryFrom<usize> for ECL
-        let ecls = [ECL::Low, ECL::Medium, ECL::Quartile, ECL::High];
-        for new_ecl in (min_ecl as usize + 1..ecls.len()).rev() {
-            if req_codewords <= data_codewords - NUM_EC_CODEWORDS[min_version][new_ecl] as usize {
-                max_ecl = ecls[new_ecl];
-                break;
+        if !strict_ecl {
+            // this is literally to avoid having to impl TryFrom<usize> for ECL
+            let ecls = [ECL::Low, ECL::Medium, ECL::Quartile, ECL::High];
+            for new_ecl in (min_ecl as usize + 1..ecls.len()).rev() {
+                if req_codewords <= data_codewords - NUM_EC_CODEWORDS[min_version][new_ecl] as usize {
+                    max_ecl = ecls[new_ecl];
+                    break;
+                }
             }
         }
 

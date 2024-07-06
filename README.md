@@ -1,6 +1,6 @@
 # fuqr
 
-financially unrecoverable qr codes
+fearlessly utilitarian qr codes
 
 ## Examples
 
@@ -28,7 +28,7 @@ Layering is neat, but it can seriously degrade scanning ability if done without 
 
 See [Halftone QR Codes](http://vecg.cs.ucl.ac.uk/Projects/SmartGeometry/halftone_QR/halftoneQR_sigga13.html), [Micrography QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphics/MQRC), [Amazing QR](https://github.com/x-hw/amazing-qr) for more thoughtful implementations with high scannability.
 
-| Background                                      | Minamalist                         | Maximize scannability                       |
+| Background                                      | Minimalist                         | Improved scannability                       |
 | ----------------------------------------------- | ---------------------------------- | -------------------------------------- |
 | ![background](./examples/layers_background.png) | ![thin](./examples/layers_min.gif) | ![diagonal](./examples/layers_max.gif) |
 
@@ -42,7 +42,11 @@ See [Halftone QR Codes](http://vecg.cs.ucl.ac.uk/Projects/SmartGeometry/halftone
 ## Other
 - Great QR code generator tutorial
   - https://www.thonky.com/qr-code-tutorial/
-- Reference implementations
+- Reference generator implementations
   - https://github.com/erwanvivien/fast_qr
   - https://github.com/unjs/uqr
+- Reference scanner implementations
   - https://github.com/zxing/zxing
+  - https://github.com/glassechidna/zxing-cpp (fork of zxing's cpp port)
+  - https://github.com/opencv/opencv_contrib/tree/4.x/modules/wechat_qrcode (fork of zxing-cpp with massive upgrades)
+
