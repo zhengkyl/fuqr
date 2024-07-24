@@ -1,6 +1,6 @@
 # fuqr
 
-fearlessly utilitarian qr codes
+freshly unearthed qr codes
 
 ## Examples
 
@@ -26,7 +26,7 @@ No need to stick to a boring pixel grid.
 
 Layering is neat, but it can seriously degrade scanning ability if done without care.
 
-See [Halftone QR Codes](http://vecg.cs.ucl.ac.uk/Projects/SmartGeometry/halftone_QR/halftoneQR_sigga13.html), [Micrography QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphics/MQRC), [Amazing QR](https://github.com/x-hw/amazing-qr) for more thoughtful implementations with high scannability.
+See [Halftone QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphics/Halftone_QRCodes), [Micrography QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphics/MQRC), [Amazing QR](https://github.com/x-hw/amazing-qr) for more thoughtful implementations with high scannability.
 
 | Background                                      | Minimalist                         | Improved scannability                       |
 | ----------------------------------------------- | ---------------------------------- | -------------------------------------- |

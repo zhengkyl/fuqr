@@ -8,15 +8,15 @@ pub fn score(matrix: &Matrix) -> usize {
 
     fn dark_proportion(matrix: &Matrix) -> usize {
         let mut dark = 0;
-        for y in 0..matrix.qr_width() {
-            for x in 0..matrix.qr_width() {
-                if matrix.get(matrix.margin().left + x, matrix.margin().top + y) == Module::DataON {
+        for y in 0..matrix.width() {
+            for x in 0..matrix.width() {
+                if matrix.get(x, y) == Module::DataON {
                     dark += 1;
                 }
             }
         }
 
-        let percent = (dark * 20) / (20 * matrix.qr_width() * matrix.qr_width());
+        let percent = (dark * 20) / (20 * matrix.width() * matrix.width());
         let middle = 50;
         let diff = if percent < middle {
             middle - percent
@@ -29,8 +29,8 @@ pub fn score(matrix: &Matrix) -> usize {
 
     fn blocks(matrix: &Matrix) -> usize {
         let mut score = 0;
-        for y in matrix.margin().top..matrix.margin().top + matrix.qr_width() - 1 {
-            for x in matrix.margin().left..matrix.margin().left + matrix.qr_width() - 1 {
+        for y in 0..matrix.width() - 1 {
+            for x in 0..matrix.width() - 1 {
                 let curr = matrix.get(x, y) as u8 & 1;
                 let tr = matrix.get(x + 1, y) as u8 & 1;
                 let bl = matrix.get(x, y + 1) as u8 & 1;
@@ -47,30 +47,21 @@ pub fn score(matrix: &Matrix) -> usize {
     fn line_patterns(matrix: &Matrix, col: bool) -> usize {
         let mut score = 0;
         let (y_mult, x_mult) = match col {
-            true => (
-                matrix.qr_width() + matrix.margin().top + matrix.margin().bottom,
-                1,
-            ),
-            false => (
-                1,
-                matrix.qr_width() + matrix.margin().left + matrix.margin().right,
-            ),
+            true => (matrix.width(), 1),
+            false => (1, matrix.width()),
         };
 
         let pattern_1 = 0b0000_1011101;
         let pattern_2 = 0b1011101_0000;
 
-        for y in 0..matrix.qr_width() {
+        for y in 0..matrix.width() {
             let mut streak = 1;
-            let mut streak_v = matrix.value[(matrix.margin().top + y) * y_mult + 0] as u8 & 1;
+            let mut streak_v = matrix.value[y * y_mult + 0] as u8 & 1;
 
             let mut window: u16 = streak_v as u16;
 
-            for x in 1..matrix.qr_width() {
-                let curr = matrix.value
-                    [(matrix.margin().top + y) * y_mult + (matrix.margin().left + x) * x_mult]
-                    as u8
-                    & 1;
+            for x in 1..matrix.width() {
+                let curr = matrix.value[y * y_mult + x * x_mult] as u8 & 1;
                 if curr == streak_v {
                     streak += 1;
                     if streak == 5 {

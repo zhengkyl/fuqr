@@ -2,39 +2,49 @@ use std::fs::File;
 
 use fuqr::{
     data::Data,
-    matrix::{Margin, Matrix, QrMatrix},
+    matrix::{Matrix, QrMatrix},
     qrcode::{Mode, Version, ECL},
-    render::{image::render_image, RenderData},
 };
-use image::{codecs::gif::GifEncoder, Delay, Frame, ImageError, Rgba};
+use image::{codecs::gif::GifEncoder, Delay, Frame, ImageError, Rgb, Rgba};
 
 fn circle(matrix: &Matrix) -> Result<(), ImageError> {
-    let center_x = matrix.width() / 2;
-    let center_y = matrix.height() / 2;
+    let center = matrix.width() / 2;
 
-    let max_size = 150;
-    let min_size = 30;
-    let max_dist = f64::sqrt(center_x as f64 * center_x as f64 + center_y as f64 + center_y as f64);
+    let margin = 2;
+    let unit = 10;
+    let max_size = 18;
+    let min_size = 3;
+    let max_dist = f64::sqrt(2.0 * center as f64 * center as f64);
     let per_dist = (max_size - min_size) as f64 / max_dist as f64;
 
-    let mut v = vec![100; matrix.width() * matrix.height()];
-    for y in 0..matrix.height() {
+    let size = (matrix.width() as u32 + margin * 2) * unit;
+    let mut buf: image::ImageBuffer<Rgb<u8>, Vec<u8>> =
+        image::ImageBuffer::from_pixel(size, size, Rgb([255, 255, 255]));
+
+    for y in 0..matrix.width() {
         for x in 0..matrix.width() {
-            let dx = isize::abs(x as isize - (center_x as isize)) as f64;
-            let dy = isize::abs(y as isize - (center_y as isize)) as f64;
+            if !matrix.get(x, y).is_on() {
+                continue;
+            }
+            let dx = isize::abs(x as isize - (center as isize)) as f64;
+            let dy = isize::abs(y as isize - (center as isize)) as f64;
             let dist = f64::sqrt(dx * dx + dy * dy);
 
-            let size = per_dist * dist;
-
-            v[y * matrix.width() + x] = size as u8 + min_size;
+            let pixel_size = (per_dist * dist) as u32 + min_size;
+            let offset = (unit as isize - pixel_size as isize) / 2;
+            for dy in 0..pixel_size {
+                for dx in 0..pixel_size {
+                    let xi = (x as u32 + margin) * unit + dx;
+                    let yi = (y as u32 + margin) * unit + dy;
+                    let pixel = buf.get_pixel_mut(
+                        (xi as isize + offset) as u32,
+                        (yi as isize + offset) as u32,
+                    );
+                    *pixel = image::Rgb([0, 0, 0])
+                }
+            }
         }
     }
-    // By default unit = 1, meaning 1 pixel per qr code pixel
-    let render = RenderData::new(&matrix).unit(10).scale_matrix(Some(&v));
-
-    let buf: image::ImageBuffer<Rgba<u8>, Vec<u8>> =
-        image::ImageBuffer::from_raw(render.width(), render.height(), render_image(&render))
-            .unwrap();
 
     buf.save("tmp/scale_circle.png")?;
 
@@ -48,25 +58,39 @@ fn stripes(matrix: &Matrix) -> Result<(), ImageError> {
 
     let period = 100;
     let middle = period / 2;
+    let unit = 10;
+    let margin = 2;
+
+    let size = (matrix.width() as u32 + margin * 2) * unit;
 
     for j in 0..50 {
-        let mut v = vec![100; matrix.width() * matrix.height()];
-        for y in 0..matrix.height() {
+        let mut buf: image::ImageBuffer<Rgba<u8>, Vec<u8>> =
+            image::ImageBuffer::from_pixel(size, size, Rgba([255, 255, 255, 255]));
+
+        for y in 0..matrix.width() {
             for x in 0..matrix.width() {
+                if !matrix.get(x, y).is_on() {
+                    continue;
+                }
                 let index = (x + y) as isize;
-
                 let pos = isize::abs(middle as isize - ((index * 5 + (j * 2)) % period) as isize);
+                let scale = 150 - 2 * pos;
 
-                let s = 150 - 2 * pos;
-                v[y * matrix.width() + x] = s as u8;
+                let pixel_size = scale as u32 * unit / 100;
+                let offset = (unit as isize - pixel_size as isize) / 2;
+                for dy in 0..pixel_size {
+                    for dx in 0..pixel_size {
+                        let xi = (x as u32 + margin) * unit + dx;
+                        let yi = (y as u32 + margin) * unit + dy;
+                        let pixel = buf.get_pixel_mut(
+                            (xi as isize + offset) as u32,
+                            (yi as isize + offset) as u32,
+                        );
+                        *pixel = image::Rgba([0, 0, 0, 255])
+                    }
+                }
             }
         }
-        // By default unit = 1, meaning 1 pixel per qr code pixel
-        let render = RenderData::new(&matrix).unit(10).scale_matrix(Some(&v));
-
-        let buf: image::ImageBuffer<Rgba<u8>, Vec<u8>> =
-            image::ImageBuffer::from_raw(render.width(), render.height(), render_image(&render))
-                .unwrap();
 
         // gifs are limited to 50fps, any higher and it resets to 10fps
         let frame = Frame::from_parts(buf, 0, 0, Delay::from_numer_denom_ms(1000, 30));
@@ -81,32 +105,46 @@ fn waves(matrix: &Matrix) -> Result<(), ImageError> {
     let mut encoder = GifEncoder::new(out);
     encoder.set_repeat(image::codecs::gif::Repeat::Infinite)?;
 
+    let unit = 10;
+    let margin = 2;
+    let size = (matrix.width() as u32 + margin * 2) * unit;
+
     let period = 100;
     let middle = period / 3; // half -> smooth, anything less has an edge
 
     let x_period = 10;
     let x_middle = x_period / 2;
     for j in (0..50).rev() {
-        let mut v = vec![100; matrix.width() * matrix.height()];
-        for y in 0..matrix.height() {
+        let mut buf: image::ImageBuffer<Rgba<u8>, Vec<u8>> =
+            image::ImageBuffer::from_pixel(size, size, Rgba([255, 255, 255, 255]));
+        for y in 0..matrix.width() {
             for x in 0..matrix.width() {
+                if !matrix.get(x, y).is_on() {
+                    continue;
+                }
                 let index = (x + y) as isize;
                 let offset_x = isize::abs(x_middle - (x as isize % x_period));
-
                 let pos = isize::abs(
                     middle as isize - (((index + offset_x) * 3 + (j * 2)) % period) as isize,
                 );
+                let scale = 180 - 2 * pos;
 
-                let s = 180 - 2 * pos;
-                v[y * matrix.width() + x] = s as u8;
+                let pixel_size = scale as u32 * unit / 100;
+
+                let offset = (unit as isize - pixel_size as isize) / 2;
+                for dy in 0..pixel_size {
+                    for dx in 0..pixel_size {
+                        let xi = (x as u32 + margin) * unit + dx;
+                        let yi = (y as u32 + margin) * unit + dy;
+                        let pixel = buf.get_pixel_mut(
+                            (xi as isize + offset) as u32,
+                            (yi as isize + offset) as u32,
+                        );
+                        *pixel = image::Rgba([0, 0, 0, 255])
+                    }
+                }
             }
         }
-        // By default unit = 1, meaning 1 pixel per qr code pixel
-        let render = RenderData::new(&matrix).unit(10).scale_matrix(Some(&v));
-
-        let buf: image::ImageBuffer<Rgba<u8>, Vec<u8>> =
-            image::ImageBuffer::from_raw(render.width(), render.height(), render_image(&render))
-                .unwrap();
 
         // gifs are limited to 50fps, any higher and it resets to 10fps
         let frame = Frame::from_parts(buf, 0, 0, Delay::from_numer_denom_ms(1000, 30));
@@ -128,7 +166,7 @@ fn main() -> Result<(), ImageError> {
         Some(x) => x,
         None => return Ok(()),
     };
-    let matrix = Matrix::new(data, None, Margin::new(2));
+    let matrix = Matrix::new(data, None);
 
     circle(&matrix)?;
     stripes(&matrix)?;

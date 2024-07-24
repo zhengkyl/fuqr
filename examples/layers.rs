@@ -2,7 +2,7 @@ use std::{fs::File, io::BufReader};
 
 use fuqr::{
     data::Data,
-    matrix::{Margin, Matrix, Module, QrMatrix},
+    matrix::{Matrix, Module, QrMatrix},
     qrcode::{Mode, Version, ECL},
 };
 use image::{
@@ -20,8 +20,8 @@ fn overlay(
     bg_cover_size: u32,
     fg_cover_size: u32,
 ) -> Result<(), ImageError> {
-    let width = matrix.width() as u32 * pixel_size;
-    let height = matrix.height() as u32 * pixel_size;
+    let margin = 2;
+    let width = (matrix.width() as u32 + margin * 2) * pixel_size;
 
     let out = File::create(out_path)?;
     let mut encoder = GifEncoder::new(out);
@@ -32,11 +32,12 @@ fn overlay(
     let o_frames = decoder.into_frames();
 
     for o_frame in o_frames {
-        let mut img_buf = ImageBuffer::from_pixel(width, height, Rgba([255, 255, 255, 255]));
+        let mut img_buf = ImageBuffer::from_pixel(width, width, Rgba([255, 255, 255, 255]));
         if bg_cover_size > 0 {
             img_buf = draw_qr(
                 DynamicImage::ImageRgba8(img_buf),
                 matrix,
+                margin,
                 pixel_size,
                 bg_cover_size,
             )?
@@ -45,8 +46,8 @@ fn overlay(
         let o_frame = o_frame.unwrap();
 
         let ratio = o_frame.buffer().width() as f64 / o_frame.buffer().height() as f64;
-        let o_width = (height as f64 * ratio) as u32;
-        let o_frame = imageops::resize(o_frame.buffer(), o_width, height, FilterType::Nearest);
+        let o_width = (width as f64 * ratio) as u32;
+        let o_frame = imageops::resize(o_frame.buffer(), o_width, width, FilterType::Nearest);
 
         imageops::overlay(
             &mut img_buf,
@@ -59,6 +60,7 @@ fn overlay(
             img_buf = draw_qr(
                 DynamicImage::ImageRgba8(img_buf),
                 matrix,
+                margin,
                 pixel_size,
                 fg_cover_size,
             )?
@@ -75,16 +77,19 @@ fn overlay(
 fn background(matrix: &Matrix) -> Result<(), ImageError> {
     let img = image::open("examples/misc/jeancarloemer.jpg")?;
     let pixel_size = 6;
+    let margin = 2;
+    let width = (matrix.width() as u32 + margin * 2) * pixel_size;
+
     let img = img
         .resize(
-            matrix.width() as u32 * pixel_size,
-            matrix.height() as u32 * pixel_size,
+            width,
+            width,
             // Nearest is fastest and noisiest resize filter
             FilterType::Nearest,
         )
         .grayscale();
 
-    let img = draw_qr(img, matrix, pixel_size, 2)?;
+    let img = draw_qr(img, matrix, margin, pixel_size, 2)?;
     img.save("tmp/layers_background.png")?;
 
     Ok(())
@@ -93,23 +98,25 @@ fn background(matrix: &Matrix) -> Result<(), ImageError> {
 fn draw_qr(
     mut img: DynamicImage,
     matrix: &Matrix,
+    margin: u32,
     pixel_size: u32,
     cover_size: u32,
 ) -> Result<DynamicImage, ImageError> {
-    assert_eq!(matrix.width() as u32 * pixel_size, img.width());
-    assert_eq!(matrix.height() as u32 * pixel_size, img.height());
+    let size = (matrix.width() as u32 + margin * 2) * pixel_size;
+    assert_eq!(size, img.width());
+    assert_eq!(size, img.height());
 
     let gap = (pixel_size - cover_size) / 2;
 
     let luma = img
         .resize(
             matrix.width() as u32,
-            matrix.height() as u32,
+            matrix.width() as u32,
             FilterType::Nearest,
         )
         .grayscale();
 
-    for y in 0..matrix.height() {
+    for y in 0..matrix.width() {
         for x in 0..matrix.width() {
             let module = matrix.get(x, y);
             if module == Module::Unset {
@@ -125,8 +132,8 @@ fn draw_qr(
                 for dy in 0..pixel_size {
                     for dx in 0..pixel_size {
                         img.put_pixel(
-                            x as u32 * pixel_size + dx,
-                            y as u32 * pixel_size + dy,
+                            (x as u32 + margin) * pixel_size + dx,
+                            (y as u32 + margin) * pixel_size + dy,
                             image::Rgba(pixel),
                         )
                     }
@@ -143,8 +150,8 @@ fn draw_qr(
             for dy in 0..cover_size {
                 for dx in 0..cover_size {
                     img.put_pixel(
-                        x as u32 * pixel_size + dx + gap,
-                        y as u32 * pixel_size + dy + gap,
+                        (x as u32 + margin) * pixel_size + dx + gap,
+                        (y as u32 + margin) * pixel_size + dy + gap,
                         image::Rgba(pixel),
                     )
                 }
@@ -167,7 +174,7 @@ fn main() -> Result<(), ImageError> {
         Some(x) => x,
         None => return Ok(()),
     };
-    let mut matrix = Matrix::new(data, None, Margin::new(2));
+    let mut matrix = Matrix::new(data, None);
 
     overlay(
         &matrix,
@@ -184,18 +191,8 @@ fn main() -> Result<(), ImageError> {
         "tmp/layers_max.gif",
         6,
         6,
-        0,
+        1,
     )?;
-
-    // Add quiet zone
-    for x in matrix.margin.left - 1..matrix.width() - matrix.margin.right + 1 {
-        matrix.set(x, matrix.margin.top - 1, Module::FinderOFF);
-        matrix.set(x, matrix.height() - matrix.margin.bottom, Module::FinderOFF);
-    }
-    for y in matrix.margin.top - 1..matrix.height() - matrix.margin.bottom + 1 {
-        matrix.set(matrix.margin.left - 1, y, Module::FinderOFF);
-        matrix.set(matrix.width() - matrix.margin.right, y, Module::FinderOFF);
-    }
 
     background(&matrix)?;
 

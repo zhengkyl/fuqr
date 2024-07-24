@@ -4,12 +4,26 @@ use crate::matrix::QrMatrix;
 pub fn render_utf8(render: &RenderData) -> String {
     // row length +1 for \n and take ceil of rows / 2 if odd
     let mut result =
-        String::with_capacity((render.matrix.width() + 1) * (render.matrix.height() + 1) / 2);
-    for y in (0..render.matrix.height()).step_by(2) {
-        for x in 0..render.matrix.width() {
-            let top = render.matrix.get(x, y) as u8 & 1 == 1;
-            let bot = if y < render.matrix.height() - 1 {
-                render.matrix.get(x, y + 1) as u8 & 1 == 1
+        String::with_capacity(((render.width() + 1) * (render.width() + 1) / 2) as usize);
+
+    let start = render.margin as usize;
+    let end = render.matrix.width() + start;
+
+    for y in (0..render.width() as usize).step_by(2) {
+        for x in 0..render.width() as usize {
+            if x < start || x >= end {
+                result.push(' ');
+                continue;
+            }
+
+            let top = if y >= start && y < end {
+                render.matrix.get(x - start, y - start).is_on()
+            } else {
+                false
+            };
+
+            let bot = if y + 1 >= start && y + 1 < end {
+                render.matrix.get(x - start, y - start + 1) as u8 & 1 == 1
             } else {
                 false
             };

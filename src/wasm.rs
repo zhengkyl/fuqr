@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 use crate::{
     data::Data,
     encoding::get_encoding_mode,
-    matrix::{Margin, Matrix},
+    matrix::Matrix,
     qrcode::{Mask, Mode, Version, ECL},
 };
 
@@ -16,7 +16,6 @@ pub struct QrOptions {
     min_ecl: ECL,
     mode: Option<Mode>,
     mask: Option<Mask>,
-    margin: Margin,
     strict_version: bool,
     strict_ecl: bool,
 }
@@ -32,7 +31,6 @@ impl QrOptions {
             strict_ecl: false,
             mode: None,
             mask: None,
-            margin: Margin::new(2),
         }
     }
     pub fn min_version(mut self, version: Version) -> Self {
@@ -49,10 +47,6 @@ impl QrOptions {
     }
     pub fn mask(mut self, mask: Option<Mask>) -> Self {
         self.mask = mask;
-        self
-    }
-    pub fn margin(mut self, margin: Margin) -> Self {
-        self.margin = margin;
         self
     }
     pub fn strict_version(mut self, strict: bool) -> Self {
@@ -106,7 +100,7 @@ pub fn get_matrix(input: &str, qr_options: QrOptions) -> Result<Matrix, QrError>
         None => return Err(QrError::ExceedsMaxCapacity),
     };
 
-    let matrix = Matrix::new(data, qr_options.mask, qr_options.margin);
+    let matrix = Matrix::new(data, qr_options.mask);
 
     Ok(matrix)
 }

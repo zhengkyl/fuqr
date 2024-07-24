@@ -1,27 +1,36 @@
 use fuqr::{
     data::Data,
-    matrix::{Margin, Matrix, QrMatrix},
+    matrix::{Matrix, QrMatrix},
     qrcode::{Mask, Mode, Version, ECL},
 };
 use image::ImageError;
 
 fn weave(matrix: &Matrix, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
     let density = 11;
+    let margin = 2;
+    let size = matrix.width() as u32 + margin + margin;
     let mut img_buf = image::ImageBuffer::from_pixel(
-        matrix.width() as u32 * density,
-        matrix.height() as u32 * density,
+        size * density,
+        size * density,
         image::Rgb([180 as u8, 180, 180]),
     );
 
     let black = [0 as u8, 0, 0];
     let white = [255 as u8, 255, 255];
 
-    for y in 0..matrix.height() {
-        for x in 0..matrix.width() {
-            let px = x as u32 * density;
-            let py = y as u32 * density;
+    for y in 0..size {
+        for x in 0..size {
+            let in_qr = y >= margin
+                && y < matrix.width() as u32 + margin
+                && x >= margin
+                && x < matrix.width() as u32 + margin;
 
-            let gap = if is_finder_center(&matrix, x, y) {
+            let px = y * density;
+            let py = x * density;
+
+            let gap = if in_qr
+                && is_finder_center(&matrix, (x - margin) as usize, (y - margin) as usize)
+            {
                 0
             } else {
                 gap
@@ -29,7 +38,12 @@ fn weave(matrix: &Matrix, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb
 
             let (black, white) = if flip { (white, black) } else { (black, white) };
 
-            if matrix.get(x, y).is_on() ^ flip {
+            if (in_qr
+                && matrix
+                    .get((x - margin) as usize, (y - margin) as usize)
+                    .is_on())
+                ^ flip
+            {
                 for dx in 0..density {
                     for dy in gap..density - gap {
                         let p = img_buf.get_pixel_mut(px + dx, py + dy);
@@ -70,46 +84,53 @@ fn weave(matrix: &Matrix, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb
 }
 
 fn diag(matrix: &Matrix, d_gap: isize, flip: bool) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
-    let density: isize = 11;
+    let density = 11;
+    let margin = 2;
+    let size = matrix.width() as isize + margin + margin;
+    let end = matrix.width() as isize + margin;
+
+    let get_matrix = |x: isize, y: isize| -> bool {
+        if y < margin || y >= end || x < margin || x >= end {
+            return false;
+        }
+        return matrix
+            .get((x - margin) as usize, (y - margin) as usize)
+            .is_on();
+    };
+
     let mut img_buf = image::ImageBuffer::from_pixel(
-        matrix.width() as u32 * density as u32,
-        matrix.height() as u32 * density as u32,
+        (size * density) as u32,
+        (size * density) as u32,
         image::Rgb([180 as u8, 180, 180]),
     );
 
     let black = [0 as u8, 0, 0];
     let white = [255 as u8, 255, 255];
 
-    for y in 0..matrix.height() {
-        for x in 0..matrix.width() {
-            let px = x as isize * density;
-            let py = y as isize * density;
+    for y in 0..size {
+        for x in 0..size {
+            let in_qr = y >= margin && y < end && x >= margin && x < end;
+
+            let px = x * density;
+            let py = y * density;
 
             let (black, white) = if flip { (white, black) } else { (black, white) };
 
-            let gap = if is_finder_center(&matrix, x, y) {
+            let gap = if in_qr
+                && is_finder_center(&matrix, (x - margin) as usize, (y - margin) as usize)
+            {
                 0
             } else {
                 d_gap
             };
 
-            if matrix.get(x, y).is_on() ^ flip {
-                let top_overflow = if x < matrix.width() - 1 && matrix.get(x + 1, y).is_on() ^ flip
-                {
-                    4
-                } else {
-                    gap
-                };
+            if get_matrix(x, y) ^ flip {
+                let top_overflow = if get_matrix(x + 1, y) ^ flip { 4 } else { gap };
 
-                let bot_overflow = if x < matrix.height() - 1 && matrix.get(x, y + 1).is_on() ^ flip
-                {
-                    4
-                } else {
-                    gap
-                };
+                let bot_overflow = if get_matrix(x, y + 1) ^ flip { 4 } else { gap };
 
                 for dy in -(top_overflow)..density + bot_overflow {
-                    if py + dy < 0 || py + dy >= matrix.height() as isize * density {
+                    if py + dy < 0 || py + dy >= size * density {
                         continue;
                     }
 
@@ -125,7 +146,7 @@ fn diag(matrix: &Matrix, d_gap: isize, flip: bool) -> image::ImageBuffer<image::
                     }
 
                     for dx in start + gap..start + length - gap {
-                        if (px + dx) < 0 || px + dx >= matrix.width() as isize * density {
+                        if (px + dx) < 0 || px + dx >= size * density {
                             continue;
                         }
                         let p = img_buf.get_pixel_mut((px + dx) as u32, (py + dy) as u32);
@@ -134,15 +155,10 @@ fn diag(matrix: &Matrix, d_gap: isize, flip: bool) -> image::ImageBuffer<image::
                 }
             } else {
                 let top_overflow = 7;
-                let bot_overflow =
-                    if y < matrix.height() - 1 && !matrix.get(x, y + 1).is_on() ^ flip {
-                        4
-                    } else {
-                        gap
-                    };
+                let bot_overflow = if !get_matrix(x, y + 1) ^ flip { 4 } else { gap };
 
                 for dy in -(top_overflow)..density + bot_overflow {
-                    if py + dy < 0 || py + dy >= matrix.height() as isize * density {
+                    if py + dy < 0 || py + dy >= size * density {
                         continue;
                     }
 
@@ -158,7 +174,7 @@ fn diag(matrix: &Matrix, d_gap: isize, flip: bool) -> image::ImageBuffer<image::
                     }
 
                     for dx in start + gap..start + length - gap {
-                        if (px + dx) < 0 || px + dx >= matrix.width() as isize * density {
+                        if (px + dx) < 0 || px + dx >= size * density {
                             continue;
                         }
                         let p = img_buf.get_pixel_mut((px + dx) as u32, (py + dy) as u32);
@@ -183,7 +199,7 @@ fn main() -> Result<(), ImageError> {
         Some(x) => x,
         None => return Ok(()),
     };
-    let matrix = Matrix::new(data, Some(Mask::M0), Margin::new(2));
+    let matrix = Matrix::new(data, Some(Mask::M0));
 
     let img_buf = weave(&matrix, 1, false);
     img_buf.save("tmp/weave_thick.png").unwrap();
@@ -197,15 +213,11 @@ fn main() -> Result<(), ImageError> {
 }
 
 fn is_finder_center(matrix: &Matrix, x: usize, y: usize) -> bool {
-    if y >= matrix.margin.top + 2 && y <= matrix.margin.top + 4 {
-        return (x >= matrix.margin.left + 2 && x <= matrix.margin.left + 4)
-            || (x >= matrix.width() - 1 - matrix.margin.right - 4
-                && x <= matrix.width() - 1 - matrix.margin.right - 2);
+    if y >= 2 && y <= 4 {
+        return (x >= 2 && x <= 4) || (x >= matrix.width() - 5 && x <= matrix.width() - 3);
     }
-    if y >= matrix.height() - 1 - matrix.margin.bottom - 4
-        && y <= matrix.height() - 1 - matrix.margin.bottom - 2
-    {
-        return x >= matrix.margin.left + 2 && x <= matrix.margin.left + 4;
+    if y >= matrix.width() - 5 && y <= matrix.width() - 3 {
+        return x >= 2 && x <= 4;
     }
 
     false
