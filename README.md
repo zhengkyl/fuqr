@@ -1,6 +1,6 @@
 # fuqr
 
-freshly unearthed qr codes
+feeling unemployed qr code generator
 
 ## Examples
 
@@ -57,7 +57,7 @@ See [Halftone QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphic
 
 ### Benchmarks
 
-There are definitely easy perf wins, but I was surprised how decent this performs. Rather, why is the `qrcode` crate so slow?
+There are definitely easy perf wins, but I was surprised how decent this performs.
 
 | Test     | Implementation | Time (µs) / (ms)   | Compared to `fast_qr` |
 | -------- | -------------- | ------------------ | --------------------- |

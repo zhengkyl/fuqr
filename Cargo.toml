@@ -2,9 +2,14 @@
 name = "fuqr"
 version = "0.1.0"
 edition = "2021"
+description = "feeling unemployed qr code generator"
+repository = "https://github.com/zhengkyl/fuqr"
+license-file = "LICENSE"
+readme = "README.md"
+exclude = [".gitignore", "benches/", "examples/"]
 
 [features]
-default = ["wasm", "text", "svg", "image", "console_error_panic_hook"]
+default = []
 wasm = ["dep:wasm-bindgen", "dep:wee_alloc", "dep:js-sys"]
 console_error_panic_hook = ["dep:console_error_panic_hook"]
 text = []
@@ -29,6 +34,7 @@ fast_qr = "0.12.5"
 
 [[bench]]
 name = "qr"
+path = "benches/qr.rs"
 harness = false
 
 [profile.release]
