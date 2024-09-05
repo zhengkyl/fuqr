@@ -72,6 +72,15 @@ pub struct Matrix {
     pub mask: Mask,
 }
 
+// #[cfg(feature = "wasm")]
+// #[wasm_bindgen]
+// impl Matrix {
+//     #[wasm_bindgen(getter)]
+//     pub fn value(self) -> Box<[Module]> {
+//         self.value.into_boxed_slice()
+//     }
+// }
+
 impl Matrix {
     pub fn new(data: Data, mask: Option<Mask>) -> Self {
         let mut matrix = Matrix {
@@ -311,7 +320,7 @@ pub trait QrMatrix {
         coords.push(first);
         if version >= 7 {
             for i in (1..len - 1).rev() {
-                coords.push(last - i * ALIGN_COORDS[version - 7]);
+                coords.push(last - i * ALIGN_OFFSETS[version - 7]);
             }
         }
         coords.push(last);
@@ -420,7 +429,7 @@ pub trait QrMatrix {
     }
 }
 
-const ALIGN_COORDS: [usize; 34] = [
+const ALIGN_OFFSETS: [usize; 34] = [
     16, 18, 20, 22, 24, 26, 28, // 7-13
     20, 22, 24, 24, 26, 28, 28, // 14-20
     22, 24, 24, 26, 26, 28, 28, // 21-27

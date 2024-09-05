@@ -174,7 +174,7 @@ fn main() -> Result<(), ImageError> {
         Some(x) => x,
         None => return Ok(()),
     };
-    let mut matrix = Matrix::new(data, None);
+    let matrix = Matrix::new(data, None);
 
     overlay(
         &matrix,
