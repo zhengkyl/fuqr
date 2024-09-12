@@ -2,6 +2,61 @@
 
 feeling unemployed qr code generator
 
+## Usage
+
+```rs
+let qr_code = generate("https://github.com/zhengkyl/fuqr", QrOptions::new()).unwrap();
+```
+
+This is what `QrOptions::new()` looks like.
+```rs
+QrOptions {
+    min_version: Version(1),
+    strict_version: false,
+    min_ecl: ECL::Low,
+    strict_ecl: false,
+    mode: None, // None = automatically determined
+    mask: None, // None = automatically determined
+}
+```
+
+`generate()` has two possible errors.
+
+`QrError::InvalidEncoding` occurs if `Mode::Numeric` or `Mode::Alphanumeric` is specified and the input string contains invalid  characters. `None` or `Mode::Byte` will not error.
+
+`QrError::ExceedsMaxCapacity` is what it sounds like, but unless `strict_version` is set to true, this is very hard to trigger. The lower limit is exceeding 1273 characters with `Mode::Byte` and `ECL::High`. See [information capacity tables](https://www.qrcode.com/en/about/version.html) for specifics.
+
+
+### Low level usage
+
+```rs
+// This returns None if input string exceeds max capacity
+let data = Data::new(
+    "https://github.com/zhengkyl/fuqr",
+    Mode::Byte,
+    Version(1), // minimum Version
+    ECL::Low, // minimum ECL
+).unwrap();
+
+// Pass None to determine and use "best" mask
+let qr_code = QrCode::new(data, Some(Mask::M1));
+```
+
+The encoding `Mode` must be specified and no errors are thrown if it's invalid. This is fine because it's probably always `Mode::Byte`.
+
+Alternatively, use `Data::new_verbose()` to force  `Version` and `ECL` to not upgrade. There is no real usecase for this.
+
+```rs
+let data = Data::new_verbose(
+    "https://github.com/zhengkyl/fuqr",
+    Mode::Byte,
+    Version(1),
+    true, // strict Version
+    ECL::Low,
+    true, // strict ECL
+).unwrap();
+```
+
 ## Examples
 
 All example code is WIP and in a very unpolished state.
@@ -48,25 +103,24 @@ See [Halftone QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphic
   - https://github.com/unjs/uqr
 - Reference scanner implementations
   - https://github.com/zxing/zxing
-  - https://github.com/glassechidna/zxing-cpp (fork of zxing's cpp port)
-  - https://github.com/opencv/opencv_contrib/tree/4.x/modules/wechat_qrcode (fork of zxing-cpp with "massive upgrades")
+  - https://github.com/opencv/opencv_contrib/tree/4.x/modules/wechat_qrcode (fork of zxing-cpp)
 
 ### TODO
 
-- [ ] send typed array to wasm
+- [x] send typed array to wasm
 
 ### Benchmarks
 
-There are definitely easy perf wins, but I was surprised how decent this performs.
+It's kinda slow, but this is probably not the bottleneck.
 
-| Test     | Implementation | Time (µs) / (ms)   | Compared to `fast_qr` |
-| -------- | -------------- | ------------------ | --------------------- |
-| **V03H** | fuqr           | 73.210 - 76.356 µs | ~1.1 slower           |
-|          | qrcode         | 505.68 - 517.48 µs | ~7.4 slower           |
-|          | fast_qr        | 69.313 - 71.027 µs | 1.0 (Fastest)         |
-| **V10H** | fuqr           | 363.13 - 369.72 µs | ~1.4 slower           |
-|          | qrcode         | 2.2020 - 2.2414 ms | ~8.5 slower           |
-|          | fast_qr        | 260.03 - 270.07 µs | 1.0 (Fastest)         |
-| **V40H** | fuqr           | 2.9916 - 3.0453 ms | ~1.3 slower           |
-|          | qrcode         | 21.117 - 21.508 ms | ~9.0 slower           |
-|          | fast_qr        | 2.3923 - 2.4474 ms | 1.0 (Fastest)         |
+| Test     | Implementation | Time (µs) / (ms)     | Compared to `fast_qr` |
+| -------- | -------------- | -------------------- | --------------------- |
+| **V03H** | fuqr           | 81.458 - 85.391 µs   | ~1.3 slower           |
+|          | qrcode         | 299.16 - 309.98 µs   | ~4.8 slower           |
+|          | fast_qr        | 63.305 - 64.625 µs   | 1.0 (Fastest)         |
+| **V10H** | fuqr           | 394.21 - 408.01 µs   | ~1.7 slower           |
+|          | qrcode         | 1.3011 - 1.3232 ms   | ~5.5 slower           |
+|          | fast_qr        | 238.47 - 243.73 µs   | 1.0 (Fastest)         |
+| **V40H** | fuqr           | 3.1761 - 3.2767 ms   | ~1.4 slower           |
+|          | qrcode         | 11.228 - 11.683 ms   | ~5.0 slower           |
+|          | fast_qr        | 2.2569 - 2.3325 ms   | 1.0 (Fastest)         |

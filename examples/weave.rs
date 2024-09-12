@@ -1,17 +1,17 @@
 use fuqr::{
-    data::Data,
-    matrix::{Matrix, QrMatrix},
-    qrcode::{Mask, Mode, Version, ECL},
+    generate,
+    matrix::{Matrix, Module},
+    QrOptions,
 };
 use image::ImageError;
 
 fn weave(matrix: &Matrix, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
-    let density = 11;
+    let density: u32 = 11;
     let margin = 2;
-    let size = matrix.width() as u32 + margin + margin;
+    let size = matrix.width + margin + margin;
     let mut img_buf = image::ImageBuffer::from_pixel(
-        size * density,
-        size * density,
+        size as u32 * density,
+        size as u32 * density,
         image::Rgb([180 as u8, 180, 180]),
     );
 
@@ -21,15 +21,17 @@ fn weave(matrix: &Matrix, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb
     for y in 0..size {
         for x in 0..size {
             let in_qr = y >= margin
-                && y < matrix.width() as u32 + margin
+                && y < matrix.width + margin
                 && x >= margin
-                && x < matrix.width() as u32 + margin;
+                && x < matrix.width + margin;
 
-            let px = y * density;
-            let py = x * density;
+            let px = y as u32 * density;
+            let py = x as u32 * density;
 
             let gap = if in_qr
-                && is_finder_center(&matrix, (x - margin) as usize, (y - margin) as usize)
+                && matrix
+                    .get(x - margin, y - margin)
+                    .has(Module::FINDER_CENTER)
             {
                 0
             } else {
@@ -38,12 +40,7 @@ fn weave(matrix: &Matrix, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb
 
             let (black, white) = if flip { (white, black) } else { (black, white) };
 
-            if (in_qr
-                && matrix
-                    .get((x - margin) as usize, (y - margin) as usize)
-                    .is_on())
-                ^ flip
-            {
+            if (in_qr && matrix.get(x - margin, y - margin).has(Module::ON)) ^ flip {
                 for dx in 0..density {
                     for dy in gap..density - gap {
                         let p = img_buf.get_pixel_mut(px + dx, py + dy);
@@ -86,16 +83,16 @@ fn weave(matrix: &Matrix, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb
 fn diag(matrix: &Matrix, d_gap: isize, flip: bool) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
     let density = 11;
     let margin = 2;
-    let size = matrix.width() as isize + margin + margin;
-    let end = matrix.width() as isize + margin;
+    let size = matrix.width as isize + margin + margin;
+    let end = matrix.width as isize + margin;
 
-    let get_matrix = |x: isize, y: isize| -> bool {
+    let get_matrix = |x, y| -> bool {
         if y < margin || y >= end || x < margin || x >= end {
             return false;
         }
         return matrix
-            .get((x - margin) as usize, (y - margin) as usize)
-            .is_on();
+            .get((x - margin) as u8, (y - margin) as u8)
+            .has(Module::ON);
     };
 
     let mut img_buf = image::ImageBuffer::from_pixel(
@@ -117,7 +114,9 @@ fn diag(matrix: &Matrix, d_gap: isize, flip: bool) -> image::ImageBuffer<image::
             let (black, white) = if flip { (white, black) } else { (black, white) };
 
             let gap = if in_qr
-                && is_finder_center(&matrix, (x - margin) as usize, (y - margin) as usize)
+                && matrix
+                    .get((x - margin) as u8, (y - margin) as u8)
+                    .has(Module::FINDER_CENTER)
             {
                 0
             } else {
@@ -188,37 +187,15 @@ fn diag(matrix: &Matrix, d_gap: isize, flip: bool) -> image::ImageBuffer<image::
 }
 
 fn main() -> Result<(), ImageError> {
-    let data = Data::new(
-        "https://github.com/zhengkyl/fuqr",
-        Mode::Byte,
-        Version(1),
-        ECL::Low,
-    );
+    let qr_code = generate("https://github.com/zhengkyl/fuqr", QrOptions::new()).unwrap();
 
-    let data = match data {
-        Some(x) => x,
-        None => return Ok(()),
-    };
-    let matrix = Matrix::new(data, Some(Mask::M0));
-
-    let img_buf = weave(&matrix, 1, false);
+    let img_buf = weave(&qr_code.matrix, 1, false);
     img_buf.save("tmp/weave_thick.png").unwrap();
 
-    let img_buf = weave(&matrix, 3, true);
+    let img_buf = weave(&qr_code.matrix, 3, true);
     img_buf.save("tmp/weave_thin.png").unwrap();
 
-    let img_buf = diag(&matrix, 1, false);
+    let img_buf = diag(&qr_code.matrix, 1, false);
     img_buf.save("tmp/weave_diag.png").unwrap();
     Ok(())
-}
-
-fn is_finder_center(matrix: &Matrix, x: usize, y: usize) -> bool {
-    if y >= 2 && y <= 4 {
-        return (x >= 2 && x <= 4) || (x >= matrix.width() - 5 && x <= matrix.width() - 3);
-    }
-    if y >= matrix.width() - 5 && y <= matrix.width() - 3 {
-        return x >= 2 && x <= 4;
-    }
-
-    false
 }

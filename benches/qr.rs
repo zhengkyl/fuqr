@@ -52,7 +52,7 @@ fn bench_fastqr_qrcode(c: &mut Criterion) {
 
         group.bench_function("fuqr", |b| {
             b.iter(|| {
-                fuqr::get_matrix(
+                fuqr::generate(
                     black_box("https://example.com/"),
                     QrOptions::new()
                         .min_ecl(*fuqr_level)

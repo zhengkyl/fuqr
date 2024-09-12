@@ -4,6 +4,7 @@ use crate::{
     qrcode::{Mode, Version, ECL},
 };
 
+#[derive(Debug)]
 pub struct Data {
     pub value: Vec<u8>,
     pub bit_len: usize,
@@ -44,23 +45,22 @@ impl Data {
                 bits += char_len * 8;
             }
         }
-
-        let mut data_codewords = (NUM_DATA_MODULES[min_version.0] / 8) as usize;
+        let mut data_codewords = (NUM_DATA_MODULES[min_version.0 as usize] / 8) as usize;
 
         let mut min_version = min_version.0;
         let mut req_codewords = (bits + 7) / 8;
 
         while req_codewords
-            > (data_codewords - NUM_EC_CODEWORDS[min_version][min_ecl as usize] as usize)
+            > (data_codewords - NUM_EC_CODEWORDS[min_version as usize][min_ecl as usize] as usize)
             && min_version < 40
         {
             if strict_version {
-                return None
+                return None;
             }
 
             min_version += 1;
 
-            data_codewords = (NUM_DATA_MODULES[min_version] / 8) as usize;
+            data_codewords = (NUM_DATA_MODULES[min_version as usize] / 8) as usize;
             // char count indicator length increase
             match mode {
                 Mode::Byte => {
@@ -84,10 +84,11 @@ impl Data {
         let mut max_ecl = min_ecl;
 
         if !strict_ecl {
-            // this is literally to avoid having to impl TryFrom<usize> for ECL
             let ecls = [ECL::Low, ECL::Medium, ECL::Quartile, ECL::High];
             for new_ecl in (min_ecl as usize + 1..ecls.len()).rev() {
-                if req_codewords <= data_codewords - NUM_EC_CODEWORDS[min_version][new_ecl] as usize {
+                if req_codewords
+                    <= data_codewords - NUM_EC_CODEWORDS[min_version as usize][new_ecl] as usize
+                {
                     max_ecl = ecls[new_ecl];
                     break;
                 }
@@ -101,7 +102,7 @@ impl Data {
             version: Version(min_version),
             ecl: max_ecl,
         };
-
+        
         match mode {
             Mode::Numeric => encode_numeric(&mut data, text),
             Mode::Alphanumeric => encode_alphanumeric(&mut data, text),

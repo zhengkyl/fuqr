@@ -1,22 +1,19 @@
+use crate::matrix::Module;
+
 use super::{RenderData, Toggle};
-use crate::matrix::QrMatrix;
 
 pub fn render_svg(render: &RenderData) -> String {
-    let scaled_width = render.width() * render.unit as u32;
-    let scaled_height = render.width() * render.unit as u32;
 
-    // TODO better initial capacity
-    // guestimate, roughly half of pixels are black
     let mut output = String::with_capacity(40 * (render.width() * render.width()) as usize / 2);
     output.push_str(&format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}">"#,
-        scaled_width, scaled_height
+        render.width(), render.width()
     ));
 
     if render.toggled(Toggle::Background) {
         output.push_str(&format!(
             r#"<rect width="{}" height="{}" fill="{}"/>"#,
-            scaled_width, scaled_height, render.background
+            render.width(), render.width(), render.background
         ));
     }
 
@@ -43,11 +40,11 @@ fn render_pixels(render: &RenderData, output: &mut String, on: bool) {
         }
     ));
 
-    for y in 0..render.matrix.width() {
-        for x in 0..render.matrix.width() {
-            let module_type = render.matrix.get(x, y);
+    for y in 0..render.qr_code.matrix.width {
+        for x in 0..render.qr_code.matrix.width {
+            let module_on = render.qr_code.matrix.get(x, y).has(Module::ON);
 
-            if module_type.is_on() != on {
+            if module_on != on {
                 continue;
             }
 

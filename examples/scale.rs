@@ -1,14 +1,14 @@
 use std::fs::File;
 
 use fuqr::{
-    data::Data,
-    matrix::{Matrix, QrMatrix},
-    qrcode::{Mode, Version, ECL},
+    generate,
+    matrix::{Matrix, Module},
+    QrOptions,
 };
 use image::{codecs::gif::GifEncoder, Delay, Frame, ImageError, Rgb, Rgba};
 
 fn circle(matrix: &Matrix) -> Result<(), ImageError> {
-    let center = matrix.width() / 2;
+    let center = matrix.width / 2;
 
     let margin = 2;
     let unit = 10;
@@ -17,13 +17,13 @@ fn circle(matrix: &Matrix) -> Result<(), ImageError> {
     let max_dist = f64::sqrt(2.0 * center as f64 * center as f64);
     let per_dist = (max_size - min_size) as f64 / max_dist as f64;
 
-    let size = (matrix.width() as u32 + margin * 2) * unit;
+    let size = (matrix.width as u32 + margin * 2) * unit;
     let mut buf: image::ImageBuffer<Rgb<u8>, Vec<u8>> =
         image::ImageBuffer::from_pixel(size, size, Rgb([255, 255, 255]));
 
-    for y in 0..matrix.width() {
-        for x in 0..matrix.width() {
-            if !matrix.get(x, y).is_on() {
+    for y in 0..matrix.width {
+        for x in 0..matrix.width {
+            if !matrix.get(x, y).has(Module::ON) {
                 continue;
             }
             let dx = isize::abs(x as isize - (center as isize)) as f64;
@@ -61,15 +61,15 @@ fn stripes(matrix: &Matrix) -> Result<(), ImageError> {
     let unit = 10;
     let margin = 2;
 
-    let size = (matrix.width() as u32 + margin * 2) * unit;
+    let size = (matrix.width as u32 + margin * 2) * unit;
 
     for j in 0..50 {
         let mut buf: image::ImageBuffer<Rgba<u8>, Vec<u8>> =
             image::ImageBuffer::from_pixel(size, size, Rgba([255, 255, 255, 255]));
 
-        for y in 0..matrix.width() {
-            for x in 0..matrix.width() {
-                if !matrix.get(x, y).is_on() {
+        for y in 0..matrix.width {
+            for x in 0..matrix.width {
+                if !matrix.get(x, y).has(Module::ON) {
                     continue;
                 }
                 let index = (x + y) as isize;
@@ -107,7 +107,7 @@ fn waves(matrix: &Matrix) -> Result<(), ImageError> {
 
     let unit = 10;
     let margin = 2;
-    let size = (matrix.width() as u32 + margin * 2) * unit;
+    let size = (matrix.width as u32 + margin * 2) * unit;
 
     let period = 100;
     let middle = period / 3; // half -> smooth, anything less has an edge
@@ -117,9 +117,9 @@ fn waves(matrix: &Matrix) -> Result<(), ImageError> {
     for j in (0..50).rev() {
         let mut buf: image::ImageBuffer<Rgba<u8>, Vec<u8>> =
             image::ImageBuffer::from_pixel(size, size, Rgba([255, 255, 255, 255]));
-        for y in 0..matrix.width() {
-            for x in 0..matrix.width() {
-                if !matrix.get(x, y).is_on() {
+        for y in 0..matrix.width {
+            for x in 0..matrix.width {
+                if !matrix.get(x, y).has(Module::ON) {
                     continue;
                 }
                 let index = (x + y) as isize;
@@ -155,22 +155,11 @@ fn waves(matrix: &Matrix) -> Result<(), ImageError> {
 }
 
 fn main() -> Result<(), ImageError> {
-    let data = Data::new(
-        "https://github.com/zhengkyl/fuqr",
-        Mode::Byte,
-        Version(1),
-        ECL::High,
-    );
+    let qr_code = generate("https://github.com/zhengkyl/fuqr", QrOptions::new()).unwrap();
 
-    let data = match data {
-        Some(x) => x,
-        None => return Ok(()),
-    };
-    let matrix = Matrix::new(data, None);
-
-    circle(&matrix)?;
-    stripes(&matrix)?;
-    waves(&matrix)?;
+    circle(&qr_code.matrix)?;
+    stripes(&qr_code.matrix)?;
+    waves(&qr_code.matrix)?;
 
     Ok(())
 }

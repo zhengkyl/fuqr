@@ -1,9 +1,9 @@
 use std::{fs::File, io::BufReader};
 
 use fuqr::{
-    data::Data,
-    matrix::{Matrix, Module, QrMatrix},
-    qrcode::{Mode, Version, ECL},
+    generate,
+    matrix::{Matrix, Module},
+    QrOptions,
 };
 use image::{
     codecs::gif::{GifDecoder, GifEncoder},
@@ -21,7 +21,7 @@ fn overlay(
     fg_cover_size: u32,
 ) -> Result<(), ImageError> {
     let margin = 2;
-    let width = (matrix.width() as u32 + margin * 2) * pixel_size;
+    let width = (matrix.width as u32 + margin * 2) * pixel_size;
 
     let out = File::create(out_path)?;
     let mut encoder = GifEncoder::new(out);
@@ -78,7 +78,7 @@ fn background(matrix: &Matrix) -> Result<(), ImageError> {
     let img = image::open("examples/misc/jeancarloemer.jpg")?;
     let pixel_size = 6;
     let margin = 2;
-    let width = (matrix.width() as u32 + margin * 2) * pixel_size;
+    let width = (matrix.width as u32 + margin * 2) * pixel_size;
 
     let img = img
         .resize(
@@ -102,7 +102,7 @@ fn draw_qr(
     pixel_size: u32,
     cover_size: u32,
 ) -> Result<DynamicImage, ImageError> {
-    let size = (matrix.width() as u32 + margin * 2) * pixel_size;
+    let size = (matrix.width as u32 + margin * 2) * pixel_size;
     assert_eq!(size, img.width());
     assert_eq!(size, img.height());
 
@@ -110,25 +110,23 @@ fn draw_qr(
 
     let luma = img
         .resize(
-            matrix.width() as u32,
-            matrix.width() as u32,
+            matrix.width as u32,
+            matrix.width as u32,
             FilterType::Nearest,
         )
         .grayscale();
 
-    for y in 0..matrix.width() {
-        for x in 0..matrix.width() {
+    for y in 0..matrix.width {
+        for x in 0..matrix.width {
             let module = matrix.get(x, y);
-            if module == Module::Unset {
-                continue;
-            }
-            let pixel = if module.is_on() {
+            let on = module.has(Module::ON);
+            let pixel = if on {
                 [0, 0, 0, 255]
             } else {
                 [255, 255, 255, 255]
             };
 
-            if module == Module::FinderON || module == Module::FinderOFF {
+            if module.has(Module::FINDER) {
                 for dy in 0..pixel_size {
                     for dx in 0..pixel_size {
                         img.put_pixel(
@@ -143,7 +141,7 @@ fn draw_qr(
             // or at least a global blackpoint based on image heuristics
             // We'll keep things simple
             let l = luma.get_pixel(x as u32, y as u32).0[0];
-            if (module.is_on() && l > 200) && (!module.is_on() && l < 50) {
+            if (on && l > 200) || (!on && l < 50) {
                 continue;
             }
 
@@ -163,21 +161,10 @@ fn draw_qr(
 }
 
 fn main() -> Result<(), ImageError> {
-    let data = Data::new(
-        "https://github.com/zhengkyl/fuqr",
-        Mode::Byte,
-        Version(1),
-        ECL::High,
-    );
-
-    let data = match data {
-        Some(x) => x,
-        None => return Ok(()),
-    };
-    let matrix = Matrix::new(data, None);
+    let qr_code = generate("https://github.com/zhengkyl/fuqr", QrOptions::new()).unwrap();
 
     overlay(
-        &matrix,
+        &qr_code.matrix,
         "examples/misc/spin.gif",
         "tmp/layers_min.gif",
         6,
@@ -186,7 +173,7 @@ fn main() -> Result<(), ImageError> {
     )?;
 
     overlay(
-        &matrix,
+        &qr_code.matrix,
         "examples/misc/4floss.gif",
         "tmp/layers_max.gif",
         6,
@@ -194,7 +181,7 @@ fn main() -> Result<(), ImageError> {
         1,
     )?;
 
-    background(&matrix)?;
+    background(&qr_code.matrix)?;
 
     Ok(())
 }

@@ -1,6 +1,5 @@
 pub mod constants;
 pub mod math;
-pub mod qrcode;
 
 pub mod data;
 pub mod encoding;
@@ -8,6 +7,7 @@ pub mod error_correction;
 
 pub mod mask;
 pub mod matrix;
+pub mod qrcode;
 
 pub mod render;
 
@@ -15,13 +15,14 @@ pub mod render;
 mod wasm;
 
 use crate::data::Data;
-use crate::matrix::Matrix;
 use crate::qrcode::{Mask, Mode, Version, ECL};
 use encoding::get_encoding_mode;
+use qrcode::QrCode;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
+#[derive(Debug)]
 pub struct QrOptions {
     min_version: Version,
     min_ecl: ECL,
@@ -71,16 +72,13 @@ impl QrOptions {
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum QrError {
     InvalidEncoding,
     ExceedsMaxCapacity,
 }
 
-#[cfg_attr(feature = "wasm", wasm_bindgen)]
-pub fn get_matrix(input: &str, qr_options: QrOptions) -> Result<Matrix, QrError> {
-    #[cfg(feature = "console_error_panic_hook")]
-    console_error_panic_hook::set_once();
-
+pub fn generate(input: &str, qr_options: QrOptions) -> Result<QrCode, QrError> {
     let mut mode = Mode::Byte;
 
     if let Some(specified) = qr_options.mode {
@@ -109,7 +107,7 @@ pub fn get_matrix(input: &str, qr_options: QrOptions) -> Result<Matrix, QrError>
         None => return Err(QrError::ExceedsMaxCapacity),
     };
 
-    let matrix = Matrix::new(data, qr_options.mask);
+    let matrix = qrcode::QrCode::new(data, qr_options.mask);
 
     Ok(matrix)
 }

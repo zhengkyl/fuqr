@@ -1,14 +1,12 @@
-#[cfg(feature = "image")]
-pub mod image;
 #[cfg(feature = "svg")]
 pub mod svg;
 #[cfg(feature = "text")]
 pub mod text;
 
-use crate::matrix::Matrix;
+use crate::qrcode::QrCode;
 
 pub struct RenderData<'m> {
-    matrix: &'m Matrix,
+    qr_code: &'m QrCode,
     foreground: String,
     background: String,
     unit: u8,
@@ -23,9 +21,9 @@ pub enum Toggle {
 }
 
 impl<'m> RenderData<'m> {
-    pub fn new(matrix: &'m Matrix) -> Self {
+    pub fn new(qr_code: &'m QrCode) -> Self {
         RenderData {
-            matrix,
+            qr_code,
             foreground: "#000".into(),
             background: "#fff".into(),
             unit: 1,
@@ -36,7 +34,7 @@ impl<'m> RenderData<'m> {
         .toggle(Toggle::ForegroundPixels)
     }
     pub fn width(&self) -> u32 {
-        (self.matrix.width() as u32 + self.margin as u32 * 2) * self.unit as u32
+        (self.qr_code.matrix.width as u32 + self.margin as u32 * 2) * self.unit as u32
     }
     pub fn unit(mut self, unit: u8) -> Self {
         self.unit = unit;

@@ -5,11 +5,11 @@ use crate::{
 };
 
 pub fn ecc_and_sequence(mut qrdata: Data) -> Vec<u8> {
-    let modules = NUM_DATA_MODULES[qrdata.version.0] as usize;
+    let modules = NUM_DATA_MODULES[qrdata.version.0 as usize] as usize;
     let codewords = modules / 8;
     let remainder_bits = modules % 8;
 
-    let num_ec_codewords = NUM_EC_CODEWORDS[qrdata.version.0][qrdata.ecl as usize] as usize;
+    let num_ec_codewords = NUM_EC_CODEWORDS[qrdata.version.0 as usize][qrdata.ecl as usize] as usize;
     let num_data_codewords = codewords - num_ec_codewords;
 
     // terminator
@@ -33,7 +33,7 @@ pub fn ecc_and_sequence(mut qrdata: Data) -> Vec<u8> {
         alternating_byte ^= 0b11111101;
     }
 
-    let blocks = NUM_BLOCKS[qrdata.version.0][qrdata.ecl as usize] as usize;
+    let blocks = NUM_BLOCKS[qrdata.version.0 as usize][qrdata.ecl as usize] as usize;
 
     let group_2_blocks = codewords % blocks;
     let group_1_blocks = blocks - group_2_blocks;
