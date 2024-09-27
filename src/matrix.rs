@@ -41,7 +41,7 @@ impl Module {
     pub const FORMAT: Module = Module(1 << 5);
     pub const VERSION: Module = Module(1 << 6);
     const MODIFIER: Module = Module(1 << 7);
-    
+
     // modified flags
     pub const FINDER_CENTER: Module = Module(Module::FINDER.0 | Module::MODIFIER.0);
     pub const ALIGNMENT_CENTER: Module = Module(Module::ALIGNMENT.0 | Module::MODIFIER.0);

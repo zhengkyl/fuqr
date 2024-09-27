@@ -19,7 +19,7 @@ pub fn generate(input: &str, qr_options: QrOptions) -> Result<JsValue, QrError> 
 
     let obj = js_sys::Object::new();
     // If these error, it's not recoverable
-    let _ = js_sys::Reflect::set(&obj, &"value".into(), &u);
+    let _ = js_sys::Reflect::set(&obj, &"matrix".into(), &u);
     let _ = js_sys::Reflect::set(&obj, &"mode".into(), &JsValue::from(qr_code.mode));
     let _ = js_sys::Reflect::set(&obj, &"version".into(), &JsValue::from(qr_code.version.0));
     let _ = js_sys::Reflect::set(&obj, &"mask".into(), &JsValue::from(qr_code.mask));

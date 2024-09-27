@@ -24,7 +24,7 @@ QrOptions {
 
 `QrError::InvalidEncoding` occurs if `Mode::Numeric` or `Mode::Alphanumeric` is specified and the input string contains invalid  characters. `None` or `Mode::Byte` will not error.
 
-`QrError::ExceedsMaxCapacity` is what it sounds like, but unless `strict_version` is set to true, this is very hard to trigger. The lower limit is exceeding 1273 characters with `Mode::Byte` and `ECL::High`. See [information capacity tables](https://www.qrcode.com/en/about/version.html) for specifics.
+`QrError::ExceedsMaxCapacity` is what it sounds like, but unless `strict_version` is set to true, this is very hard to trigger. The lower limit is exceeding 1273 characters with `Mode::Byte` and `ECL::High`. See [capacity table](https://www.thonky.com/qr-code-tutorial/character-capacities) for specifics.
 
 
 ### Low level usage

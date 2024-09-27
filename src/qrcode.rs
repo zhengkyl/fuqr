@@ -15,7 +15,7 @@ pub enum Mode {
     Numeric,
     Alphanumeric,
     Byte,
-    // no usage for Kanji, ECI, StructuredAppend, FNC1,
+    // no plans for Kanji, ECI, StructuredAppend, FNC1,
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
