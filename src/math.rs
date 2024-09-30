@@ -1,9 +1,9 @@
 // note: a 256 * 256 mult table is a possible alternative
-pub const LOG_TABLE: [u8; 255] = log_table();
-pub const ANTILOG_TABLE: [u8; 256] = antilog_table();
+pub const ANTILOG_TABLE: [u8; 255] = antilog_table();
+pub const LOG_TABLE: [u8; 256] = log_table();
 
-// 0 to 254
-const fn log_table() -> [u8; 255] {
+/// result of 2 raised to power from 0 to 254
+const fn antilog_table() -> [u8; 255] {
     let mut array = [0; 255];
     array[0] = 1;
     let mut i = 1;
@@ -18,13 +18,14 @@ const fn log_table() -> [u8; 255] {
     array
 }
 // 1 to 255 todo, should this include 255?
-const fn antilog_table() -> [u8; 256] {
+/// result of log base 2
+const fn log_table() -> [u8; 256] {
     let mut array = [0; 256];
     let mut i = 1;
     while i < 256 {
         let mut j = 0;
         while j < 256 {
-            if LOG_TABLE[j] == i as u8 {
+            if ANTILOG_TABLE[j] == i as u8 {
                 array[i] = j as u8;
                 break;
             }

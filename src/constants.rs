@@ -156,13 +156,13 @@ const fn gen_polynomials() -> [[u8; 30]; 31] {
             // coefficient of same power from previous polynomial (multiplied by a^i-1)
             let exp = ((table[i - 1][j - 1] as usize + i - 1) % 255) as u8;
             // coefficient of 1 lesser power from previous polynomial (multiplied by x)
-            let coeff = LOG_TABLE[table[i - 1][j] as usize] ^ LOG_TABLE[exp as usize];
-            table[i][j] = ANTILOG_TABLE[coeff as usize];
+            let coeff = ANTILOG_TABLE[table[i - 1][j] as usize] ^ ANTILOG_TABLE[exp as usize];
+            table[i][j] = LOG_TABLE[coeff as usize];
             j -= 1;
         }
         // Same logic as above, b/c first coefficient always 0
-        let coeff = LOG_TABLE[table[i - 1][0] as usize] ^ LOG_TABLE[i - 1];
-        table[i][0] = ANTILOG_TABLE[coeff as usize];
+        let coeff = ANTILOG_TABLE[table[i - 1][0] as usize] ^ ANTILOG_TABLE[i - 1];
+        table[i][0] = LOG_TABLE[coeff as usize];
 
         i += 1;
     }

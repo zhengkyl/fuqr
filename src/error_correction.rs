@@ -105,10 +105,10 @@ fn remainder(data: &[u8], generator: &[u8]) -> Vec<u8> {
             continue;
         }
 
-        let alpha_diff = ANTILOG_TABLE[base[i] as usize];
+        let alpha_diff = LOG_TABLE[base[i] as usize];
 
         for j in 0..generator.len() {
-            base[i + j + 1] ^= LOG_TABLE[(generator[j] as usize + alpha_diff as usize) % 255];
+            base[i + j + 1] ^= ANTILOG_TABLE[(generator[j] as usize + alpha_diff as usize) % 255];
         }
     }
 

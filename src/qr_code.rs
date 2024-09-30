@@ -1,9 +1,5 @@
-use std::ops::BitOrAssign;
-
 use crate::{
-    constants::{NUM_BLOCKS, NUM_DATA_MODULES, NUM_EC_CODEWORDS},
     data::Data,
-    encoding::num_cci_bits,
     error_correction::ecc_and_sequence,
     mask::score,
     matrix::{Matrix, Module},
