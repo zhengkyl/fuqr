@@ -13,7 +13,7 @@ use image::{
 };
 
 fn overlay(
-    matrix: &Matrix,
+    matrix:  &Matrix<Module>,
     gif_path: &str,
     out_path: &str,
     pixel_size: u32,
@@ -74,7 +74,7 @@ fn overlay(
     Ok(())
 }
 
-fn background(matrix: &Matrix) -> Result<(), ImageError> {
+fn background(matrix:  &Matrix<Module>) -> Result<(), ImageError> {
     let img = image::open("examples/misc/jeancarloemer.jpg")?;
     let pixel_size = 6;
     let margin = 2;
@@ -97,7 +97,7 @@ fn background(matrix: &Matrix) -> Result<(), ImageError> {
 
 fn draw_qr(
     mut img: DynamicImage,
-    matrix: &Matrix,
+    matrix:  &Matrix<Module>,
     margin: u32,
     pixel_size: u32,
     cover_size: u32,

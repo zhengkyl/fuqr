@@ -5,7 +5,7 @@ use fuqr::{
 };
 use image::ImageError;
 
-fn weave(matrix: &Matrix, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
+fn weave(matrix: &Matrix<Module>, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
     let density: u32 = 11;
     let margin = 2;
     let size = matrix.width + margin + margin;
@@ -80,7 +80,7 @@ fn weave(matrix: &Matrix, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb
     img_buf
 }
 
-fn diag(matrix: &Matrix, d_gap: isize, flip: bool) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
+fn diag(matrix: &Matrix<Module>, d_gap: isize, flip: bool) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
     let density = 11;
     let margin = 2;
     let size = matrix.width as isize + margin + margin;

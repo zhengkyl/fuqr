@@ -9,6 +9,7 @@ let qr_code = generate("https://github.com/zhengkyl/fuqr", QrOptions::new()).unw
 ```
 
 This is what `QrOptions::new()` looks like.
+
 ```rs
 QrOptions {
     min_version: Version(1),
@@ -22,10 +23,15 @@ QrOptions {
 
 `generate()` has two possible errors.
 
-`QrError::InvalidEncoding` occurs if `Mode::Numeric` or `Mode::Alphanumeric` is specified and the input string contains invalid  characters. `None` or `Mode::Byte` will not error.
+`QrError::InvalidEncoding` occurs if `Mode::Numeric` or `Mode::Alphanumeric` is specified and the input string contains invalid characters. `None` or `Mode::Byte` will not error.
 
 `QrError::ExceedsMaxCapacity` is what it sounds like, but unless `strict_version` is set to true, this is very hard to trigger. The lower limit is exceeding 1273 characters with `Mode::Byte` and `ECL::High`. See [capacity table](https://www.thonky.com/qr-code-tutorial/character-capacities) for specifics.
 
+### NOTE
+
+- MASK SCORING IS (probably) NOT IMPLEMENTED CORRECTLY
+
+This is a useless step so I haven't bothered fixing the code, and I honestly doubt there are many correct implementations out there because of how annoying it is. There's probably no perceptible benefit to picking one mask over another, and even if there is, I am willing to bet picking randomly outperforms the "algorithm" on real data.
 
 ### Low level usage
 
@@ -44,7 +50,7 @@ let qr_code = QrCode::new(data, Some(Mask::M1));
 
 The encoding `Mode` must be specified and no errors are thrown if it's invalid. This is fine because it's probably always `Mode::Byte`.
 
-Alternatively, use `Data::new_verbose()` to force  `Version` and `ECL` to not upgrade. There is no real usecase for this.
+Alternatively, use `Data::new_verbose()` to force `Version` and `ECL` to not upgrade. There is no real usecase for this.
 
 ```rs
 let data = Data::new_verbose(
@@ -113,14 +119,14 @@ See [Halftone QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphic
 
 It's kinda slow, but this is probably not the bottleneck.
 
-| Test     | Implementation | Time (µs) / (ms)     | Compared to `fast_qr` |
-| -------- | -------------- | -------------------- | --------------------- |
-| **V03H** | fuqr           | 81.458 - 85.391 µs   | ~1.3 slower           |
-|          | qrcode         | 299.16 - 309.98 µs   | ~4.8 slower           |
-|          | fast_qr        | 63.305 - 64.625 µs   | 1.0 (Fastest)         |
-| **V10H** | fuqr           | 394.21 - 408.01 µs   | ~1.7 slower           |
-|          | qrcode         | 1.3011 - 1.3232 ms   | ~5.5 slower           |
-|          | fast_qr        | 238.47 - 243.73 µs   | 1.0 (Fastest)         |
-| **V40H** | fuqr           | 3.1761 - 3.2767 ms   | ~1.4 slower           |
-|          | qrcode         | 11.228 - 11.683 ms   | ~5.0 slower           |
-|          | fast_qr        | 2.2569 - 2.3325 ms   | 1.0 (Fastest)         |
+| Test     | Implementation | Time (µs) / (ms)   | Compared to `fast_qr` |
+| -------- | -------------- | ------------------ | --------------------- |
+| **V03H** | fuqr           | 81.458 - 85.391 µs | ~1.3 slower           |
+|          | qrcode         | 299.16 - 309.98 µs | ~4.8 slower           |
+|          | fast_qr        | 63.305 - 64.625 µs | 1.0 (Fastest)         |
+| **V10H** | fuqr           | 394.21 - 408.01 µs | ~1.7 slower           |
+|          | qrcode         | 1.3011 - 1.3232 ms | ~5.5 slower           |
+|          | fast_qr        | 238.47 - 243.73 µs | 1.0 (Fastest)         |
+| **V40H** | fuqr           | 3.1761 - 3.2767 ms | ~1.4 slower           |
+|          | qrcode         | 11.228 - 11.683 ms | ~5.0 slower           |
+|          | fast_qr        | 2.2569 - 2.3325 ms | 1.0 (Fastest)         |

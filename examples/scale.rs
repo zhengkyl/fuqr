@@ -7,7 +7,7 @@ use fuqr::{
 };
 use image::{codecs::gif::GifEncoder, Delay, Frame, ImageError, Rgb, Rgba};
 
-fn circle(matrix: &Matrix) -> Result<(), ImageError> {
+fn circle(matrix: &Matrix<Module>) -> Result<(), ImageError> {
     let center = matrix.width / 2;
 
     let margin = 2;
@@ -51,7 +51,7 @@ fn circle(matrix: &Matrix) -> Result<(), ImageError> {
     Ok(())
 }
 
-fn stripes(matrix: &Matrix) -> Result<(), ImageError> {
+fn stripes(matrix: &Matrix<Module>) -> Result<(), ImageError> {
     let out = File::create("tmp/scale_stripes.gif")?;
     let mut encoder = GifEncoder::new(out);
     encoder.set_repeat(image::codecs::gif::Repeat::Infinite)?;
@@ -100,7 +100,7 @@ fn stripes(matrix: &Matrix) -> Result<(), ImageError> {
     Ok(())
 }
 
-fn waves(matrix: &Matrix) -> Result<(), ImageError> {
+fn waves(matrix: &Matrix<Module>) -> Result<(), ImageError> {
     let out = File::create("tmp/scale_waves.gif")?;
     let mut encoder = GifEncoder::new(out);
     encoder.set_repeat(image::codecs::gif::Repeat::Infinite)?;

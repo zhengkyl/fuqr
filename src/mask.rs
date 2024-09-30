@@ -2,11 +2,11 @@ use crate::matrix::{Matrix, Module};
 
 // todo UNTESTED CODE: HERE BE DRAGONS
 // if score is wrong for all masks, then this still works
-pub fn score(matrix: &Matrix) -> u32 {
+pub fn score(matrix: &Matrix<Module>) -> u32 {
     // todo what are perf implications of scoring all masks
     // 8 masks * 5 iterations (blocks + rows are non sequential access)
 
-    fn dark_proportion(matrix: &Matrix) -> u32 {
+    fn dark_proportion(matrix: &Matrix<Module>) -> u32 {
         let mut dark = 0;
         for y in 0..matrix.width {
             for x in 0..matrix.width {
@@ -27,7 +27,7 @@ pub fn score(matrix: &Matrix) -> u32 {
         10 * k
     }
 
-    fn blocks(matrix: &Matrix) -> u32 {
+    fn blocks(matrix: &Matrix<Module>) -> u32 {
         let mut score = 0;
         for y in 0..matrix.width - 1 {
             for x in 0..matrix.width - 1 {
@@ -44,7 +44,7 @@ pub fn score(matrix: &Matrix) -> u32 {
     }
 
     // detects streaks >= 5 and finder patterns
-    fn line_patterns(matrix: &Matrix, col: bool) -> u32 {
+    fn line_patterns(matrix: &Matrix<Module>, col: bool) -> u32 {
         let mut score = 0;
         let (y_mult, x_mult) = match col {
             true => (matrix.width, 1),

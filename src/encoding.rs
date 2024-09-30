@@ -68,7 +68,6 @@ pub fn encode_alphanumeric(qrdata: &mut Data, input: &str) {
     }
 }
 
-// ISO-8859-1 aka first 256 unicode
 pub fn encode_byte(qrdata: &mut Data, input: &str) {
     qrdata.push_bits(0b0100, 4);
     qrdata.push_bits(

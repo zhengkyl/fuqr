@@ -4,41 +4,41 @@ use crate::{
     math::{ANTILOG_TABLE, LOG_TABLE},
 };
 
-pub fn ecc_and_sequence(mut qrdata: Data) -> Vec<u8> {
-    let modules = NUM_DATA_MODULES[qrdata.version.0 as usize] as usize;
+pub fn ecc_and_sequence(mut data: Data) -> Vec<u8> {
+    let modules = NUM_DATA_MODULES[data.version.0 as usize] as usize;
     let codewords = modules / 8;
     let remainder_bits = modules % 8;
 
-    let num_ec_codewords = NUM_EC_CODEWORDS[qrdata.version.0 as usize][qrdata.ecl as usize] as usize;
+    let num_ec_codewords = NUM_EC_CODEWORDS[data.version.0 as usize][data.ecl as usize] as usize;
     let num_data_codewords = codewords - num_ec_codewords;
 
     // terminator
-    let remainder_data_bits = (num_data_codewords * 8) - (qrdata.bit_len);
+    let remainder_data_bits = (num_data_codewords * 8) - (data.bit_len);
     let term_len = if remainder_data_bits < 4 {
         remainder_data_bits
     } else {
         4
     };
-    qrdata.push_bits(0, term_len);
+    data.push_bits(0, term_len);
 
     // byte align
-    let byte_pad = (8 - (qrdata.bit_len % 8)) % 8;
-    qrdata.push_bits(0, byte_pad);
+    let byte_pad = (8 - (data.bit_len % 8)) % 8;
+    data.push_bits(0, byte_pad);
 
     // fill data capacity
-    let data_pad = num_data_codewords - (qrdata.bit_len / 8);
+    let data_pad = num_data_codewords - (data.bit_len / 8);
     let mut alternating_byte = 0b11101100;
     for _ in 0..data_pad {
-        qrdata.push_bits(alternating_byte, 8);
+        data.push_bits(alternating_byte, 8);
         alternating_byte ^= 0b11111101;
     }
 
-    let blocks = NUM_BLOCKS[qrdata.version.0 as usize][qrdata.ecl as usize] as usize;
+    let blocks = NUM_BLOCKS[data.version.0 as usize][data.ecl as usize] as usize;
 
     let group_2_blocks = codewords % blocks;
     let group_1_blocks = blocks - group_2_blocks;
 
-    let data_codewords = qrdata.value;
+    let data_codewords = data.value;
 
     let data_per_g1_block = num_data_codewords / blocks;
     let data_per_g2_block = data_per_g1_block + 1;
