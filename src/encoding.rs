@@ -1,9 +1,9 @@
 use crate::{
     data::Data,
-    qrcode::{Mode, Version},
+    qr_code::{Mode, Version},
 };
 
-pub fn get_encoding_mode(input: &str) -> Mode {
+pub fn encoding_mode(input: &str) -> Mode {
     let mut mode = Mode::Numeric;
     for b in input.bytes() {
         if b >= b'0' && b <= b'9' {
@@ -22,10 +22,7 @@ pub fn get_encoding_mode(input: &str) -> Mode {
 // input fits in u8 b/c numeric
 pub fn encode_numeric(qrdata: &mut Data, input: &str) {
     qrdata.push_bits(0b0001, 4);
-    qrdata.push_bits(
-        input.len(),
-        bits_char_count_indicator(qrdata.version, Mode::Numeric),
-    );
+    qrdata.push_bits(input.len(), num_cci_bits(qrdata.version, Mode::Numeric));
 
     let input = input.as_bytes();
     for i in 0..(input.len() / 3) {
@@ -52,7 +49,7 @@ pub fn encode_alphanumeric(qrdata: &mut Data, input: &str) {
     qrdata.push_bits(0b0010, 4);
     qrdata.push_bits(
         input.len(),
-        bits_char_count_indicator(qrdata.version, Mode::Alphanumeric),
+        num_cci_bits(qrdata.version, Mode::Alphanumeric),
     );
 
     let input = input.as_bytes();
@@ -70,16 +67,13 @@ pub fn encode_alphanumeric(qrdata: &mut Data, input: &str) {
 
 pub fn encode_byte(qrdata: &mut Data, input: &str) {
     qrdata.push_bits(0b0100, 4);
-    qrdata.push_bits(
-        input.len(),
-        bits_char_count_indicator(qrdata.version, Mode::Byte),
-    );
+    qrdata.push_bits(input.len(), num_cci_bits(qrdata.version, Mode::Byte));
     for c in input.as_bytes() {
         qrdata.push_bits((*c).into(), 8);
     }
 }
 
-pub fn bits_char_count_indicator(version: Version, mode: Mode) -> usize {
+pub fn num_cci_bits(version: Version, mode: Mode) -> usize {
     if mode == Mode::Byte {
         return if version.0 < 10 { 8 } else { 16 };
     }
@@ -88,7 +82,6 @@ pub fn bits_char_count_indicator(version: Version, mode: Mode) -> usize {
     let mut base = match mode {
         Mode::Numeric => 10,
         Mode::Alphanumeric => 9,
-        // Mode::Kanji => 8,
         _ => unreachable!("Unknown mode"),
     };
     if version.0 > 9 {
@@ -121,7 +114,7 @@ fn byte_to_b45(c: u8) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use crate::qrcode::ECL;
+    use crate::qr_code::ECL;
 
     use super::*;
     fn get_data_vec(bits: &str) -> Vec<u8> {

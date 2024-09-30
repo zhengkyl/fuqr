@@ -1,6 +1,6 @@
 use crate::{
     math::{ANTILOG_TABLE, LOG_TABLE},
-    qrcode::ECL,
+    qr_code::ECL,
 };
 
 pub const NUM_DATA_MODULES: [u16; 41] = num_data_modules();
@@ -228,7 +228,7 @@ const fn format_info() -> [[u32; 8]; 4] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::qrcode::Mask;
+    use crate::qr_code::Mask;
 
     #[test]
     fn information_works() {

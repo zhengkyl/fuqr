@@ -2,7 +2,7 @@ use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign};
 
 use crate::{
     constants::{FORMAT_INFO, VERSION_INFO},
-    qrcode::{Mask, Version, ECL},
+    qr_code::{Mask, Version, ECL},
 };
 
 #[derive(Debug)]

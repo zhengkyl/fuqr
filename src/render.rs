@@ -3,7 +3,7 @@ pub mod svg;
 #[cfg(feature = "text")]
 pub mod text;
 
-use crate::qrcode::QrCode;
+use crate::qr_code::QrCode;
 
 pub struct RenderData<'m> {
     qr_code: &'m QrCode,

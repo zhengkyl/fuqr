@@ -5,9 +5,10 @@ pub mod data;
 pub mod encoding;
 pub mod error_correction;
 
+pub mod bit_info;
 pub mod mask;
 pub mod matrix;
-pub mod qrcode;
+pub mod qr_code;
 
 pub mod render;
 
@@ -15,9 +16,9 @@ pub mod render;
 mod wasm;
 
 use crate::data::Data;
-use crate::qrcode::{Mask, Mode, Version, ECL};
-use encoding::get_encoding_mode;
-use qrcode::QrCode;
+use crate::qr_code::{Mask, Mode, Version, ECL};
+use encoding::encoding_mode;
+use qr_code::QrCode;
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
@@ -83,14 +84,14 @@ pub fn generate(input: &str, qr_options: QrOptions) -> Result<QrCode, QrError> {
 
     if let Some(specified) = qr_options.mode {
         if specified != Mode::Byte {
-            let lowest = get_encoding_mode(input);
+            let lowest = encoding_mode(input);
             if (lowest as u8) > (specified as u8) {
                 return Err(QrError::InvalidEncoding);
             }
             mode = specified;
         }
     } else {
-        mode = get_encoding_mode(input);
+        mode = encoding_mode(input);
     }
 
     let data = Data::new_verbose(
@@ -107,7 +108,7 @@ pub fn generate(input: &str, qr_options: QrOptions) -> Result<QrCode, QrError> {
         None => return Err(QrError::ExceedsMaxCapacity),
     };
 
-    let matrix = qrcode::QrCode::new(data, qr_options.mask);
+    let matrix = qr_code::QrCode::new(data, qr_options.mask);
 
     Ok(matrix)
 }

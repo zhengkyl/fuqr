@@ -19,8 +19,8 @@ fn bench_fastqr_qrcode(c: &mut Criterion) {
     ) in &[
         (
             "V03H",
-            fuqr::qrcode::Version::new(3),
-            fuqr::qrcode::ECL::High,
+            fuqr::qr_code::Version::new(3),
+            fuqr::qr_code::ECL::High,
             fast_qr::Version::V03,
             fast_qr::ECL::H,
             qrcode::Version::Normal(3),
@@ -28,8 +28,8 @@ fn bench_fastqr_qrcode(c: &mut Criterion) {
         ),
         (
             "V10H",
-            fuqr::qrcode::Version::new(10),
-            fuqr::qrcode::ECL::High,
+            fuqr::qr_code::Version::new(10),
+            fuqr::qr_code::ECL::High,
             fast_qr::Version::V10,
             fast_qr::ECL::H,
             qrcode::Version::Normal(10),
@@ -37,8 +37,8 @@ fn bench_fastqr_qrcode(c: &mut Criterion) {
         ),
         (
             "V40H",
-            fuqr::qrcode::Version::new(40),
-            fuqr::qrcode::ECL::High,
+            fuqr::qr_code::Version::new(40),
+            fuqr::qr_code::ECL::High,
             fast_qr::Version::V40,
             fast_qr::ECL::H,
             qrcode::Version::Normal(40),
