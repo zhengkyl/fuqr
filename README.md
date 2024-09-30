@@ -31,7 +31,7 @@ QrOptions {
 
 - MASK SCORING IS (probably) NOT IMPLEMENTED CORRECTLY
 
-This is a useless step so I haven't bothered fixing the code, and I honestly doubt there are many correct implementations out there because of how annoying it is. There's probably no perceptible benefit to picking one mask over another, and even if there is, I am willing to bet picking randomly outperforms the "algorithm" on real data.
+I haven't bothered fixing the code, because it's annoying. There's probably no perceptible benefit to picking one mask over another, and even if there is it's probably barely better than random choice.
 
 ### Low level usage
 
