@@ -9,8 +9,8 @@ pub struct RenderData<'m> {
     qr_code: &'m QrCode,
     foreground: String,
     background: String,
-    unit: u8,
-    margin: u8,
+    unit: usize,
+    margin: usize,
     toggle_options: u8,
 }
 
@@ -33,14 +33,14 @@ impl<'m> RenderData<'m> {
         .toggle(Toggle::Background)
         .toggle(Toggle::ForegroundPixels)
     }
-    pub fn width(&self) -> u32 {
-        (self.qr_code.matrix.width as u32 + self.margin as u32 * 2) * self.unit as u32
+    pub fn width(&self) -> usize {
+        (self.qr_code.matrix.width + self.margin * 2) * self.unit
     }
-    pub fn unit(mut self, unit: u8) -> Self {
+    pub fn unit(mut self, unit: usize) -> Self {
         self.unit = unit;
         self
     }
-    pub fn margin(mut self, margin: u8) -> Self {
+    pub fn margin(mut self, margin: usize) -> Self {
         self.margin = margin;
         self
     }

@@ -5,11 +5,11 @@ use crate::{
 };
 
 pub fn ecc_and_sequence(mut data: Data) -> Vec<u8> {
-    let modules = NUM_DATA_MODULES[data.version.0 as usize] as usize;
+    let modules = NUM_DATA_MODULES[data.version.0] as usize;
     let codewords = modules / 8;
     let remainder_bits = modules % 8;
 
-    let num_ec_codewords = NUM_EC_CODEWORDS[data.version.0 as usize][data.ecl as usize] as usize;
+    let num_ec_codewords = NUM_EC_CODEWORDS[data.version.0][data.ecl as usize] as usize;
     let num_data_codewords = codewords - num_ec_codewords;
 
     // terminator
@@ -33,7 +33,7 @@ pub fn ecc_and_sequence(mut data: Data) -> Vec<u8> {
         alternating_byte ^= 0b11111101;
     }
 
-    let blocks = NUM_BLOCKS[data.version.0 as usize][data.ecl as usize] as usize;
+    let blocks = NUM_BLOCKS[data.version.0][data.ecl as usize] as usize;
 
     let group_2_blocks = codewords % blocks;
     let group_1_blocks = blocks - group_2_blocks;
@@ -92,7 +92,7 @@ pub fn ecc_and_sequence(mut data: Data) -> Vec<u8> {
 
 // todo
 // benchmark potential optimizations
-fn remainder(data: &[u8], generator: &[u8]) -> Vec<u8> {
+pub fn remainder(data: &[u8], generator: &[u8]) -> Vec<u8> {
     let num_codewords = generator.len();
 
     // todo double check this length

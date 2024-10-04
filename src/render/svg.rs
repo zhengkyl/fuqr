@@ -3,17 +3,19 @@ use crate::matrix::Module;
 use super::{RenderData, Toggle};
 
 pub fn render_svg(render: &RenderData) -> String {
-
-    let mut output = String::with_capacity(40 * (render.width() * render.width()) as usize / 2);
+    let mut output = String::with_capacity(40 * (render.width() * render.width()) / 2);
     output.push_str(&format!(
         r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {} {}">"#,
-        render.width(), render.width()
+        render.width(),
+        render.width()
     ));
 
     if render.toggled(Toggle::Background) {
         output.push_str(&format!(
             r#"<rect width="{}" height="{}" fill="{}"/>"#,
-            render.width(), render.width(), render.background
+            render.width(),
+            render.width(),
+            render.background
         ));
     }
 

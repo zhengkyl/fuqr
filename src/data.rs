@@ -1,5 +1,5 @@
 use crate::{
-    bit_info::{Bit, BitInfo},
+    bit_info::{BitInfo, Info},
     constants::{NUM_DATA_MODULES, NUM_EC_CODEWORDS},
     encoding::{encode_alphanumeric, encode_byte, encode_numeric, num_cci_bits},
     qr_code::{mask_fn, Mask, Mode, Version, ECL},
@@ -46,13 +46,13 @@ impl Data {
                 bits += char_len * 8;
             }
         }
-        let mut data_codewords = (NUM_DATA_MODULES[min_version.0 as usize] / 8) as usize;
+        let mut data_codewords = (NUM_DATA_MODULES[min_version.0] / 8) as usize;
 
         let mut min_version = min_version.0;
         let mut req_codewords = (bits + 7) / 8;
 
         while req_codewords
-            > (data_codewords - NUM_EC_CODEWORDS[min_version as usize][min_ecl as usize] as usize)
+            > (data_codewords - NUM_EC_CODEWORDS[min_version][min_ecl as usize] as usize)
             && min_version < 40
         {
             if strict_version {
@@ -61,7 +61,7 @@ impl Data {
 
             min_version += 1;
 
-            data_codewords = (NUM_DATA_MODULES[min_version as usize] / 8) as usize;
+            data_codewords = (NUM_DATA_MODULES[min_version] / 8) as usize;
             // char count indicator length increase
             match mode {
                 Mode::Byte => {
@@ -87,8 +87,7 @@ impl Data {
         if !strict_ecl {
             let ecls = [ECL::Low, ECL::Medium, ECL::Quartile, ECL::High];
             for new_ecl in (min_ecl as usize + 1..ecls.len()).rev() {
-                if req_codewords
-                    <= data_codewords - NUM_EC_CODEWORDS[min_version as usize][new_ecl] as usize
+                if req_codewords <= data_codewords - NUM_EC_CODEWORDS[min_version][new_ecl] as usize
                 {
                     max_ecl = ecls[new_ecl];
                     break;
@@ -138,36 +137,36 @@ impl Data {
         }
     }
 
-    pub fn set_image_bits(&mut self, bit_info: &BitInfo, mask: Mask, image: &Vec<bool>) {
-        assert_eq!(self.mode, bit_info.mode);
-        assert_eq!(self.version, bit_info.version);
-        assert_eq!(self.ecl, bit_info.ecl);
-        assert!(image.len() == (bit_info.matrix.width as usize) * (bit_info.matrix.width as usize));
+    // pub fn set_image_bits(&mut self, bit_info: &BitInfo, mask: Mask, image: &Vec<bool>) {
+    //     assert_eq!(self.mode, bit_info.mode);
+    //     assert_eq!(self.version, bit_info.version);
+    //     assert_eq!(self.ecl, bit_info.ecl);
+    //     assert!(image.len() == (bit_info.matrix.width) * (bit_info.matrix.width));
 
-        let orig_bit_len = self.bit_len;
+    //     let orig_bit_len = self.bit_len;
 
-        let byte_len = (NUM_DATA_MODULES[self.version.0 as usize] / 8)
-            - NUM_EC_CODEWORDS[self.version.0 as usize][self.ecl as usize];
-        self.value.resize(byte_len as usize, 0);
-        self.bit_len = byte_len as usize * 8;
+    //     let byte_len = (NUM_DATA_MODULES[self.version.0] / 8)
+    //         - NUM_EC_CODEWORDS[self.version.0][self.ecl as usize];
+    //     self.value.resize(byte_len as usize, 0);
+    //     self.bit_len = byte_len as usize * 8;
 
-        let mask_bit = mask_fn(mask);
+    //     let mask_bit = mask_fn(mask);
 
-        for y in 0..bit_info.matrix.width {
-            for x in 0..bit_info.matrix.width {
-                let desired = image[y as usize * bit_info.matrix.width as usize + x as usize];
-                if desired == mask_bit(x as u16, y as u16) {
-                    continue;
-                }
+    //     for y in 0..bit_info.matrix.width {
+    //         for x in 0..bit_info.matrix.width {
+    //             let desired = image[y * bit_info.matrix.width + x];
+    //             if desired == mask_bit(x as u16, y as u16) {
+    //                 continue;
+    //             }
 
-                let bit = bit_info.matrix.get(x, y);
+    //             let bit = bit_info.matrix.get(x, y);
 
-                if bit.module == Bit::MESSAGE && bit.index >= orig_bit_len as u16 {
-                    let i = (bit.index / 8) as usize;
-                    let pos = (bit.index % 8) as usize;
-                    self.value[i] ^= 1 << (7 - pos);
-                }
-            }
-        }
-    }
+    //             if bit.module == Info::MESSAGE && bit.bit_i >= orig_bit_len {
+    //                 let i = bit.bit_i / 8;
+    //                 let pos = bit.bit_i % 8;
+    //                 self.value[i] ^= 1 << (7 - pos);
+    //             }
+    //         }
+    //     }
+    // }
 }

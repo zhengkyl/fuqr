@@ -56,14 +56,12 @@ pub fn score(matrix: &Matrix<Module>) -> u32 {
 
         for y in 0..matrix.width {
             let mut streak = 1;
-            let mut streak_v = matrix.value[y as usize * y_mult as usize + 0].has(Module::ON);
+            let mut streak_v = matrix.value[y * y_mult + 0].has(Module::ON);
 
             let mut window: u16 = streak_v as u16;
 
             for x in 1..matrix.width {
-                let curr = matrix.value
-                    [y as usize * y_mult as usize + x as usize * x_mult as usize]
-                    .has(Module::ON);
+                let curr = matrix.value[y * y_mult + x * x_mult].has(Module::ON);
                 if curr == streak_v {
                     streak += 1;
                     if streak == 5 {

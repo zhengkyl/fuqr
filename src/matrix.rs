@@ -8,25 +8,25 @@ use crate::{
 #[derive(Debug)]
 pub struct Matrix<T: Copy + From<Module> + Into<Module> + BitOrAssign<Module>> {
     pub value: Vec<T>,
-    pub width: u8,
+    pub width: usize,
 }
 
 impl<T: Copy + From<Module> + Into<Module> + BitOrAssign<Module>> Matrix<T> {
     pub fn new(version: Version, init: T) -> Self {
         let width = version.0 * 4 + 17;
         Matrix {
-            value: vec![init; (width as usize) * (width as usize)],
+            value: vec![init; (width) * (width)],
             width,
         }
     }
-    pub fn get(&self, x: u8, y: u8) -> T {
-        self.value[y as usize * self.width as usize + x as usize]
+    pub fn get(&self, x: usize, y: usize) -> T {
+        self.value[y * self.width + x]
     }
-    pub fn get_mut(&mut self, x: u8, y: u8) -> &mut T {
-        &mut (self.value[y as usize * self.width as usize + x as usize])
+    pub fn get_mut(&mut self, x: usize, y: usize) -> &mut T {
+        &mut (self.value[y * self.width + x])
     }
-    pub fn set(&mut self, x: u8, y: u8, value: T) {
-        self.value[y as usize * self.width as usize + x as usize] = value;
+    pub fn set(&mut self, x: usize, y: usize, value: T) {
+        self.value[y * self.width + x] = value;
     }
 
     pub fn set_finder(&mut self) {
@@ -74,17 +74,17 @@ impl<T: Copy + From<Module> + Into<Module> + BitOrAssign<Module>> Matrix<T> {
         }
 
         let first = 6;
-        let last = self.width as usize - 7;
-        let len = version as usize / 7 + 2;
+        let last = self.width - 7;
+        let len = version / 7 + 2;
         let mut coords = Vec::with_capacity(len);
 
         coords.push(first);
         if version >= 7 {
             for i in (1..len - 1).rev() {
-                coords.push((last - i * ALIGN_OFFSETS[(version - 7) as usize]) as u8);
+                coords.push((last - i * ALIGN_OFFSETS[version - 7]) as usize);
             }
         }
-        coords.push(last as u8);
+        coords.push(last);
 
         for i in 0..len {
             for j in 0..len {
@@ -124,11 +124,11 @@ impl<T: Copy + From<Module> + Into<Module> + BitOrAssign<Module>> Matrix<T> {
         // overlaps with alignment pattern so must |=
         let len = self.width - 16;
         for i in 0..len {
-            let module = Module::TIMING | ((i & 1) ^ 1).into();
+            let module = Module::TIMING | ((i as u8 & 1) ^ 1).into();
             *self.get_mut(8 + i, 6) |= module;
         }
         for i in 0..len {
-            let module = Module::TIMING | ((i & 1) ^ 1).into();
+            let module = Module::TIMING | ((i as u8 & 1) ^ 1).into();
             *self.get_mut(6, 8 + i) |= module;
         }
     }
@@ -170,7 +170,7 @@ impl<T: Copy + From<Module> + Into<Module> + BitOrAssign<Module>> Matrix<T> {
         if version < 7 {
             return;
         }
-        let info = VERSION_INFO[version as usize];
+        let info = VERSION_INFO[version];
 
         for i in 0..18 {
             let on = ((info >> i) as u8 & 1).into();
@@ -204,7 +204,7 @@ impl<T: Copy + From<Module> + Into<Module> + BitOrAssign<Module>> Matrix<T> {
                 if row == row_limit {
                     break;
                 }
-                row = ((row as isize) + row_dir) as u8;
+                row = ((row as isize) + row_dir) as usize;
             }
 
             if col == 1 {
@@ -229,7 +229,7 @@ impl<T: Copy + From<Module> + Into<Module> + BitOrAssign<Module>> Matrix<T> {
                 if col == 6 {
                     col -= 1;
                 }
-                row_limit = (row_limit as isize + top_bot_gap * row_dir) as u8;
+                row_limit = (row_limit as isize + top_bot_gap * row_dir) as usize;
             }
         }
     }

@@ -5,7 +5,11 @@ use fuqr::{
 };
 use image::ImageError;
 
-fn weave(matrix: &Matrix<Module>, gap: u32, flip: bool) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
+fn weave(
+    matrix: &Matrix<Module>,
+    gap: u32,
+    flip: bool,
+) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
     let density: u32 = 11;
     let margin = 2;
     let size = matrix.width + margin + margin;
@@ -80,7 +84,11 @@ fn weave(matrix: &Matrix<Module>, gap: u32, flip: bool) -> image::ImageBuffer<im
     img_buf
 }
 
-fn diag(matrix: &Matrix<Module>, d_gap: isize, flip: bool) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
+fn diag(
+    matrix: &Matrix<Module>,
+    d_gap: isize,
+    flip: bool,
+) -> image::ImageBuffer<image::Rgb<u8>, Vec<u8>> {
     let density = 11;
     let margin = 2;
     let size = matrix.width as isize + margin + margin;
@@ -91,7 +99,7 @@ fn diag(matrix: &Matrix<Module>, d_gap: isize, flip: bool) -> image::ImageBuffer
             return false;
         }
         return matrix
-            .get((x - margin) as u8, (y - margin) as u8)
+            .get((x - margin) as usize, (y - margin) as usize)
             .has(Module::ON);
     };
 
@@ -115,7 +123,7 @@ fn diag(matrix: &Matrix<Module>, d_gap: isize, flip: bool) -> image::ImageBuffer
 
             let gap = if in_qr
                 && matrix
-                    .get((x - margin) as u8, (y - margin) as u8)
+                    .get((x - margin) as usize, (y - margin) as usize)
                     .has(Module::FINDER_CENTER)
             {
                 0

@@ -28,12 +28,12 @@ pub enum ECL {
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct Version(pub u8);
+pub struct Version(pub usize);
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 impl Version {
     #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
-    pub fn new(version: u8) -> Self {
+    pub fn new(version: usize) -> Self {
         assert!(version >= 1 && version <= 40);
         Version(version)
     }

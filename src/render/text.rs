@@ -4,14 +4,13 @@ use super::RenderData;
 
 pub fn render_utf8(render: &RenderData) -> String {
     // row length +1 for \n and take ceil of rows / 2 if odd
-    let mut result =
-        String::with_capacity(((render.width() + 1) * (render.width() + 1) / 2) as usize);
+    let mut result = String::with_capacity((render.width() + 1) * (render.width() + 1) / 2);
 
     let start = render.margin;
     let end = render.qr_code.matrix.width + start;
 
-    for y in (0..render.width() as u8).step_by(2) {
-        for x in 0..render.width() as u8 {
+    for y in (0..render.width()).step_by(2) {
+        for x in 0..render.width() {
             if x < start || x >= end {
                 result.push(' ');
                 continue;
