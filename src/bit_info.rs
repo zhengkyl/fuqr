@@ -2,8 +2,7 @@ use std::ops::BitOrAssign;
 
 use crate::{
     constants::{GEN_POLYNOMIALS, NUM_BLOCKS, NUM_DATA_MODULES, NUM_EC_CODEWORDS},
-    data::Data,
-    encoding::num_cci_bits,
+    data::{BitVec, Data},
     error_correction::remainder,
     matrix::{Matrix, Module},
     qr_code::{mask_fn, Mask, Mode, QrCode, Version, ECL},
@@ -181,7 +180,7 @@ impl BitInfo {
 #[derive(Debug)]
 pub struct QartCode<'a> {
     pub bit_info: BitInfo,
-    pub initials: Vec<Vec<u8>>,
+    pub initials: Vec<BitVec>,
     pub blocks: Vec<Vec<WeightBit>>,
     pub data: &'a mut Data,
 }
@@ -203,17 +202,17 @@ impl<'a> QartCode<'a> {
         let ecc_per_block = num_ec_codewords / blocks;
 
         // terminator seems required
-        let remainder_data_bits = (num_data_codewords * 8) - (data.bit_len);
+        let remainder_data_bits = (num_data_codewords * 8) - (data.bits.len());
         let term_len = if remainder_data_bits < 4 {
             remainder_data_bits
         } else {
             4
         };
 
-        data.push_bits(0, term_len);
-        let orig_data_bit_len = data.bit_len;
-        if data.value.len() < num_data_codewords {
-            data.value.resize(num_data_codewords, 0);
+        data.bits.push_n(0, term_len);
+        let orig_data_bit_len = data.bits.len();
+        if data.bits.value.len() < num_data_codewords {
+            data.bits.value.resize(num_data_codewords, 0);
         }
 
         let mut initials = vec![];
@@ -228,19 +227,19 @@ impl<'a> QartCode<'a> {
             };
 
             let byte_start = data_i / 8;
-            let mut data_codewords = data.value[byte_start..(byte_start + data_per_block)].to_vec();
+            let mut data_codewords =
+                data.bits.value[byte_start..(byte_start + data_per_block)].to_vec();
             let mut ecc = remainder(
                 &data_codewords,
                 &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
             );
             data_codewords.append(&mut ecc);
-            initials.push(data_codewords);
+            initials.push(data_codewords.into());
 
             blocks.push(Vec::with_capacity(data_per_block + ecc_per_block));
             for j in 0..(data_per_block + ecc_per_block) * 8 {
                 if data_i < orig_data_bit_len && j < (data_per_block * 8) {
-                    let byte = data.value[data_i / 8];
-                    let on = byte & (1 << (7 - (data_i % 8))) != 0;
+                    let on = data.bits.get(data_i) == 1;
                     blocks[i].push(WeightBit::new(on, 127));
                     data_i += 1;
                 } else {
@@ -248,13 +247,6 @@ impl<'a> QartCode<'a> {
                 }
             }
         }
-
-        // initials.iter().for_each(|init|{
-        //     init.iter().for_each(|byte| {
-        //         print!("{:0>8b}", byte);
-        //     });
-        //     println!("");
-        // });
 
         QartCode {
             bit_info: BitInfo::new(data.mode, data.version, data.ecl, mask),
@@ -265,7 +257,7 @@ impl<'a> QartCode<'a> {
     }
 
     pub fn to_qr_code(mut self, image: Vec<bool>) -> QrCode {
-        self.data.push_bits(0, 0);
+        self.data.bits.push_n(0, 0);
 
         let width = self.data.version.0 * 4 + 17;
 
@@ -284,7 +276,9 @@ impl<'a> QartCode<'a> {
         let data_per_g1_block = num_data_codewords / blocks;
         let ecc_per_block = num_ec_codewords / blocks;
 
-        assert_eq!(image.len(), width * width);
+        let margin = 6;
+        let img_width = width - 2 * margin;
+        assert_eq!(image.len(), img_width * img_width);
 
         let mask = mask_fn(self.bit_info.mask);
 
@@ -297,18 +291,22 @@ impl<'a> QartCode<'a> {
 
                 let pbit = self.blocks[bit.block_i][bit.bit_i];
                 if pbit.hardness() < 127 {
-                    let value = mask(x as u16, y as u16) ^ image[y * width + x];
-                    self.blocks[bit.block_i][bit.bit_i] = WeightBit::new(value, 64)
+                    if x > margin && y > margin && x < width - 1 - margin && y < width - 1 - margin
+                    {
+                        let value = mask(x as u16, y as u16)
+                            ^ image[(y - margin) * img_width + (x - margin)];
+                        self.blocks[bit.block_i][bit.bit_i] = WeightBit::new(value, 64)
+                    }
                 }
             }
         }
 
         let mut g1_basis = vec![];
         for i in 0..data_per_g1_block * 8 {
-            let mut v = vec![0; data_per_g1_block];
-            v[i / 8] = 1 << (7 - (i % 8));
-            v.append(&mut remainder(
-                &v,
+            let mut v: BitVec = vec![0; data_per_g1_block].into();
+            v.set(i);
+            v.value.append(&mut remainder(
+                &v.value,
                 &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
             ));
             g1_basis.push(v);
@@ -316,31 +314,24 @@ impl<'a> QartCode<'a> {
 
         let mut g2_basis = vec![];
         for i in 0..(data_per_g1_block + 1) * 8 {
-            let mut v = vec![0; data_per_g1_block + 1];
-            v[i / 8] = 1 << (7 - (i % 8));
-            v.append(&mut remainder(
-                &v,
+            let mut v: BitVec = vec![0; data_per_g1_block + 1].into();
+            v.set(i);
+            v.value.append(&mut remainder(
+                &v.value,
                 &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
             ));
             g2_basis.push(v);
         }
 
-        let mut final_blocks = Vec::with_capacity(self.blocks.len());
         for i in 0..group_1_blocks {
-            final_blocks.push(find_closest_match(
-                &g1_basis,
-                &self.initials[i],
-                &self.blocks[i],
-                1,
-            ));
+            find_closest_match(&g1_basis, &mut self.initials[i], &self.blocks[i]);
         }
         for i in 0..group_2_blocks {
-            final_blocks.push(find_closest_match(
+            find_closest_match(
                 &g2_basis,
-                &self.initials[i],
-                &self.blocks[i],
-                1,
-            ));
+                &mut self.initials[group_1_blocks + i],
+                &self.blocks[group_1_blocks + i],
+            );
         }
 
         let mut matrix = Matrix::new(self.data.version, Module(0));
@@ -357,8 +348,7 @@ impl<'a> QartCode<'a> {
                     matrix.set(x, y, Module::DATA | (Module(on)));
                 } else {
                     let on = mask(x as u16, y as u16) as u8
-                        ^ (final_blocks[info.block_i][info.bit_i / 8] >> (7 - (info.bit_i % 8)))
-                            & 1;
+                        ^ self.initials[info.block_i].get(info.bit_i);
                     matrix.set(x, y, Module::DATA | Module(on));
                 }
             }
@@ -378,73 +368,43 @@ impl<'a> QartCode<'a> {
     }
 }
 
-fn find_closest_match(
-    basis_matrix: &Vec<Vec<u8>>,
-    initial: &Vec<u8>,
-    desired: &Vec<WeightBit>,
-    beam_width: usize,
-) -> Vec<u8> {
-    // return initial.clone();
-    // let new_vector = initial
-    //     .iter()
-    //     .enumerate()
-    //     .map(|(j, byte)| byte ^ basis_matrix[0][j])
-    //     .collect::<Vec<u8>>();
-    // println!("initial");
-    // initial.iter().for_each(|byte| {
-    //     print!("{:0>8b}", byte);
-    // });
-    // println!("basis 0");
-    // basis_matrix[0].iter().for_each(|byte| {
-    //     print!("{:0>8b}", byte);
-    // });
-    // println!("out");
-    // new_vector.iter().for_each(|byte| {
-    //     print!("{:0>8b}", byte);
-    // });
-    // println!("");
-    // return new_vector;
-    let mut beam = vec![(initial.clone(), weighted_hamming(&initial, &desired))];
-    println!("start {}", beam[0].1);
-    // opportunity to try adding every basis
-    for _ in 0..basis_matrix.len() {
-        let mut new_beam = vec![];
-        for (vector, _weight) in &beam {
-            for (i, basis) in basis_matrix.iter().enumerate() {
-                if (vector[i / 8] >> (7 - (i % 8))) & 1 == 1 {
-                    // basis vector has only 1 bit set in data codewords
+fn find_closest_match(basis_matrix: &Vec<BitVec>, initial: &mut BitVec, desired: &Vec<WeightBit>) {
+    let mut basis_matrix: Vec<Option<BitVec>> = basis_matrix
+        .iter()
+        .map(|basis| Some(basis.value.clone().into()))
+        .collect();
+
+    for (i, weight_bit) in desired.iter().enumerate() {
+        if weight_bit.hardness() == 0 {
+            continue;
+        }
+
+        let mut found: Option<BitVec> = None;
+        for basis_opt in basis_matrix.iter_mut() {
+            if let Some(basis) = basis_opt {
+                if basis.get(i) == 0 {
                     continue;
                 }
-                let new_vector = vector
-                    .iter()
-                    .enumerate()
-                    .map(|(j, byte)| byte ^ basis[j])
-                    .collect::<Vec<u8>>();
-                let new_weight = weighted_hamming(&new_vector, desired);
-                new_beam.push((new_vector, new_weight));
+                if let Some(prev) = found.as_ref() {
+                    for k in 0..basis.value.len() {
+                        basis.value[k] ^= prev.value[k]
+                    }
+                } else {
+                    found = basis_opt.take();
+                }
             }
         }
 
-        beam.append(&mut new_beam);
-        beam.sort_by(|a, b| a.1.cmp(&b.1));
-        beam.truncate(beam_width);
+        if found.is_none() {
+            continue;
+        }
 
-        println!("iter {}", beam[0].1);
-    }
-
-    beam[0].0.clone()
-}
-
-fn weighted_hamming(v: &Vec<u8>, w: &Vec<WeightBit>) -> u16 {
-    let mut dist = 0;
-    // let mut matches = 0;
-    for i in 0..w.len() {
-        let a = (v[i / 8] >> (7 - (i % 8))) & 1;
-        let b = w[i].value();
-        if a != b {
-            dist += w[i].hardness() as u16;
+        if initial.get(i) != weight_bit.value() {
+            let prev = found.unwrap();
+            for j in 0..prev.value.len() {
+                initial.value[j] ^= prev.value[j];
+            }
         }
     }
-    // println!("matches {} dist {}", matches,  dist);
-    dist
 }
+

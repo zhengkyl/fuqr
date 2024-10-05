@@ -1,14 +1,12 @@
 use crate::{
-    bit_info::{BitInfo, Info},
     constants::{NUM_DATA_MODULES, NUM_EC_CODEWORDS},
     encoding::{encode_alphanumeric, encode_byte, encode_numeric, num_cci_bits},
-    qr_code::{mask_fn, Mask, Mode, Version, ECL},
+    qr_code::{Mode, Version, ECL},
 };
 
 #[derive(Debug)]
 pub struct Data {
-    pub value: Vec<u8>,
-    pub bit_len: usize,
+    pub bits: BitVec,
     pub mode: Mode,
     pub version: Version,
     pub ecl: ECL,
@@ -96,8 +94,7 @@ impl Data {
         }
 
         let mut data = Data {
-            value: Vec::with_capacity(data_codewords),
-            bit_len: 0,
+            bits: BitVec::with_capacity(data_codewords * 8),
             mode,
             version: Version(min_version),
             ecl: max_ecl,
@@ -110,63 +107,68 @@ impl Data {
         }
         Some(data)
     }
+}
 
-    pub fn push_bits(&mut self, input: usize, len: usize) {
-        let gap = (8 - (self.bit_len % 8)) % 8;
-        self.bit_len += len;
+#[derive(Debug, PartialEq, Eq)]
+pub struct BitVec {
+    pub value: Vec<u8>,
+    len: usize,
+}
 
-        if gap >= len {
+impl BitVec {
+    pub fn new() -> Self {
+        BitVec {
+            value: Vec::new(),
+            len: 0,
+        }
+    }
+    pub fn with_capacity(capacity: usize) -> Self {
+        BitVec {
+            value: Vec::with_capacity((capacity + 7) / 8),
+            len: 0,
+        }
+    }
+    pub fn set(&mut self, i: usize) {
+        self.value[i / 8] = 1 << (7 - (i % 8));
+    }
+    pub fn get(&self, i: usize) -> u8 {
+        (self.value[i / 8] >> (7 - (i % 8))) & 1
+    }
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    pub fn push_n(&mut self, input: usize, n: usize) {
+        let gap = (8 - (self.len % 8)) % 8;
+        self.len += n;
+
+        if gap >= n {
             let i = self.value.len() - 1;
-            self.value[i] |= (input << (gap - len)) as u8;
+            self.value[i] |= (input << (gap - n)) as u8;
             return;
         }
 
-        let mut len = len - gap;
+        let mut n = n - gap;
         if gap > 0 {
             let i = self.value.len() - 1;
-            self.value[i] |= (input >> len) as u8;
+            self.value[i] |= (input >> n) as u8;
         }
 
-        while len >= 8 {
-            len -= 8;
-            self.value.push((input >> len) as u8);
+        while n >= 8 {
+            n -= 8;
+            self.value.push((input >> n) as u8);
         }
 
-        if len > 0 {
-            self.value.push((input << (8 - len)) as u8);
+        if n > 0 {
+            self.value.push((input << (8 - n)) as u8);
         }
     }
+}
 
-    // pub fn set_image_bits(&mut self, bit_info: &BitInfo, mask: Mask, image: &Vec<bool>) {
-    //     assert_eq!(self.mode, bit_info.mode);
-    //     assert_eq!(self.version, bit_info.version);
-    //     assert_eq!(self.ecl, bit_info.ecl);
-    //     assert!(image.len() == (bit_info.matrix.width) * (bit_info.matrix.width));
-
-    //     let orig_bit_len = self.bit_len;
-
-    //     let byte_len = (NUM_DATA_MODULES[self.version.0] / 8)
-    //         - NUM_EC_CODEWORDS[self.version.0][self.ecl as usize];
-    //     self.value.resize(byte_len as usize, 0);
-    //     self.bit_len = byte_len as usize * 8;
-
-    //     let mask_bit = mask_fn(mask);
-
-    //     for y in 0..bit_info.matrix.width {
-    //         for x in 0..bit_info.matrix.width {
-    //             let desired = image[y * bit_info.matrix.width + x];
-    //             if desired == mask_bit(x as u16, y as u16) {
-    //                 continue;
-    //             }
-
-    //             let bit = bit_info.matrix.get(x, y);
-
-    //             if bit.module == Info::MESSAGE && bit.bit_i >= orig_bit_len {
-    //                 let i = bit.bit_i / 8;
-    //                 let pos = bit.bit_i % 8;
-    //                 self.value[i] ^= 1 << (7 - pos);
-    //             }
-    //         }
-    //     }
-    // }
+impl From<Vec<u8>> for BitVec {
+    fn from(value: Vec<u8>) -> Self {
+        BitVec {
+            len: value.len() * 8,
+            value,
+        }
+    }
 }

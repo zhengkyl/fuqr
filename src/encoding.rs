@@ -20,34 +20,35 @@ pub fn encoding_mode(input: &str) -> Mode {
 }
 
 // input fits in u8 b/c numeric
-pub fn encode_numeric(qrdata: &mut Data, input: &str) {
-    qrdata.push_bits(0b0001, 4);
-    qrdata.push_bits(input.len(), num_cci_bits(qrdata.version, Mode::Numeric));
+pub fn encode_numeric(data: &mut Data, input: &str) {
+    data.bits.push_n(0b0001, 4);
+    data.bits
+        .push_n(input.len(), num_cci_bits(data.version, Mode::Numeric));
 
     let input = input.as_bytes();
     for i in 0..(input.len() / 3) {
         let group = (input[i * 3] - b'0') as usize * 100
             + (input[i * 3 + 1] - b'0') as usize * 10
             + (input[i * 3 + 2] - b'0') as usize;
-        qrdata.push_bits(group, 10);
+        data.bits.push_n(group, 10);
     }
 
     match input.len() % 3 {
         1 => {
             let group = input[input.len() - 1] - b'0';
-            qrdata.push_bits(group.into(), 4);
+            data.bits.push_n(group.into(), 4);
         }
         2 => {
             let group = (input[input.len() - 2] - b'0') * 10 + (input[input.len() - 1] - b'0');
-            qrdata.push_bits(group.into(), 7);
+            data.bits.push_n(group.into(), 7);
         }
         _ => (),
     }
 }
 
 pub fn encode_alphanumeric(qrdata: &mut Data, input: &str) {
-    qrdata.push_bits(0b0010, 4);
-    qrdata.push_bits(
+    qrdata.bits.push_n(0b0010, 4);
+    qrdata.bits.push_n(
         input.len(),
         num_cci_bits(qrdata.version, Mode::Alphanumeric),
     );
@@ -57,19 +58,23 @@ pub fn encode_alphanumeric(qrdata: &mut Data, input: &str) {
     for i in 0..(input.len() / 2) {
         let group =
             byte_to_b45(input[i * 2]) as usize * 45 + byte_to_b45(input[i * 2 + 1]) as usize;
-        qrdata.push_bits(group, 11);
+        qrdata.bits.push_n(group, 11);
     }
 
     if (input.len() & 1) == 1 {
-        qrdata.push_bits(byte_to_b45(input[input.len() - 1]).into(), 6);
+        qrdata
+            .bits
+            .push_n(byte_to_b45(input[input.len() - 1]).into(), 6);
     }
 }
 
 pub fn encode_byte(qrdata: &mut Data, input: &str) {
-    qrdata.push_bits(0b0100, 4);
-    qrdata.push_bits(input.len(), num_cci_bits(qrdata.version, Mode::Byte));
+    qrdata.bits.push_n(0b0100, 4);
+    qrdata
+        .bits
+        .push_n(input.len(), num_cci_bits(qrdata.version, Mode::Byte));
     for c in input.as_bytes() {
-        qrdata.push_bits((*c).into(), 8);
+        qrdata.bits.push_n((*c).into(), 8);
     }
 }
 
@@ -114,11 +119,11 @@ fn byte_to_b45(c: u8) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use crate::qr_code::ECL;
+    use crate::{data::BitVec, qr_code::ECL};
 
     use super::*;
-    fn get_data_vec(bits: &str) -> Vec<u8> {
-        let mut v = Vec::new();
+    fn get_data_bits(bits: &str) -> BitVec {
+        let mut v = BitVec::new();
 
         let mut i = 0;
         let mut num = 0;
@@ -132,14 +137,14 @@ mod tests {
                 _ => continue,
             }
             if i == 8 {
-                v.push(num);
+                v.push_n(num, 1);
                 num = 0;
                 i = 0;
             }
         }
 
         if i > 0 {
-            v.push(num);
+            v.push_n(num, 1);
         }
 
         v
@@ -149,30 +154,30 @@ mod tests {
     fn encode_numeric_works() {
         let data = Data::new("1", Mode::Numeric, Version(1), ECL::Low).unwrap();
 
-        assert_eq!(data.value, get_data_vec("0001 0000000001 0001"));
+        assert_eq!(data.bits, get_data_bits("0001 0000000001 0001"));
 
         let data = Data::new("99", Mode::Numeric, Version(1), ECL::Low).unwrap();
-        assert_eq!(data.value, get_data_vec("0001 0000000010 1100011"));
+        assert_eq!(data.bits, get_data_bits("0001 0000000010 1100011"));
 
         let data = Data::new("123456", Mode::Numeric, Version(1), ECL::Low).unwrap();
         assert_eq!(
-            data.value,
-            get_data_vec("0001 0000000110 0001111011 0111001000")
+            data.bits,
+            get_data_bits("0001 0000000110 0001111011 0111001000")
         );
     }
 
     #[test]
     fn encode_alphanumeric_works() {
         let data = Data::new("1", Mode::Alphanumeric, Version(1), ECL::Low).unwrap();
-        assert_eq!(data.value, get_data_vec("0010 000000001 000001"));
+        assert_eq!(data.bits, get_data_bits("0010 000000001 000001"));
 
         let data = Data::new("99", Mode::Alphanumeric, Version(1), ECL::Low).unwrap();
-        assert_eq!(data.value, get_data_vec("0010 000000010 00110011110"));
+        assert_eq!(data.bits, get_data_bits("0010 000000010 00110011110"));
 
         let data = Data::new("ABC1::4", Mode::Alphanumeric, Version(1), ECL::Low).unwrap();
         assert_eq!(
-            data.value,
-            get_data_vec("0010 000000111 00111001101 01000011101 11111101000 000100")
+            data.bits,
+            get_data_bits("0010 000000111 00111001101 01000011101 11111101000 000100")
         );
     }
 
@@ -180,6 +185,6 @@ mod tests {
     fn encode_byte_works() {
         let data = Data::new("0", Mode::Byte, Version(1), ECL::Low).unwrap();
 
-        assert_eq!(data.value, get_data_vec("0100 00000001 00110000"));
+        assert_eq!(data.bits, get_data_bits("0100 00000001 00110000"));
     }
 }

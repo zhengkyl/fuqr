@@ -25,7 +25,7 @@ fn main() {
     let mut data = Data::new_verbose(
         "https://github.com/zhengkyl/fuqr",
         Mode::Byte,
-        Version(4),
+        Version(10),
         false,
         ECL::Low,
         true,
@@ -40,36 +40,15 @@ fn main() {
     let qart = QartCode::new(&mut data, Mask::M0);
     // let bit_info = BitInfo::new(data.mode, data.version, data.ecl);
 
-    let size = qart.data.version.0 * 4 + 17;
+    let size = (qart.data.version.0 * 4 + 17) - (2 * 6);
     let img = image::open("examples/misc/apple_41.png").unwrap();
     let img = img
         .resize(
             size as u32,
             size as u32,
-            // Nearest is fastest and noisiest resize filter
             FilterType::Nearest,
         )
         .grayscale();
-
-    // bit_info.matrix
-
-    // let bit_info = qart.bit_info;
-
-    // for y in 0..bit_info.matrix.width {
-    //     for x in 0..bit_info.matrix.width {
-    //         print!(
-    //             "{:>4}",
-    //             bit_info.matrix.get(x,y).bit_i
-    //             // if (bit_info.matrix.get(x, y).module == Bit::ERROR_CORRECTION) {
-    //             //     1
-    //             // } else {
-    //             //     0
-    //             // }
-    //         );
-    //     }
-    //     println!();
-    // }
-    // return;
 
     let mut dd = vec![false; size * size];
     for y in 0..size {
