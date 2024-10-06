@@ -38,7 +38,7 @@ pub fn ecc_and_sequence(mut data: Data) -> Vec<u8> {
     let group_2_blocks = codewords % blocks;
     let group_1_blocks = blocks - group_2_blocks;
 
-    let data_codewords = data.bits.value;
+    let data_codewords = data.bits.to_bytes();
 
     let data_per_g1_block = num_data_codewords / blocks;
     let data_per_g2_block = data_per_g1_block + 1;

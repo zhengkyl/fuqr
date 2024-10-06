@@ -111,7 +111,7 @@ impl Data {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct BitVec {
-    pub value: Vec<u8>,
+    value: Vec<u8>,
     len: usize,
 }
 
@@ -128,11 +128,23 @@ impl BitVec {
             len: 0,
         }
     }
+    pub fn resize(&mut self, new_len: usize) {
+        self.value.resize((new_len + 7) / 8, 0);
+        self.len = new_len;
+    }
+    /// self must be byte aligned
+    pub fn append(&mut self, other: &mut Vec<u8>) {
+        self.value.append(other);
+        self.len += other.len() * 8;
+    }
+    pub fn to_bytes(self) -> Vec<u8> {
+        self.value
+    }
     pub fn set(&mut self, i: usize) {
         self.value[i / 8] = 1 << (7 - (i % 8));
     }
-    pub fn get(&self, i: usize) -> u8 {
-        (self.value[i / 8] >> (7 - (i % 8))) & 1
+    pub fn get(&self, i: usize) -> bool {
+        ((self.value[i / 8] >> (7 - (i % 8))) & 1) == 1
     }
     pub fn len(&self) -> usize {
         self.len
@@ -170,5 +182,17 @@ impl From<Vec<u8>> for BitVec {
             len: value.len() * 8,
             value,
         }
+    }
+}
+
+impl AsRef<[u8]> for BitVec {
+    fn as_ref(&self) -> &[u8] {
+        &self.value
+    }
+}
+
+impl AsMut<[u8]> for BitVec {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.value
     }
 }

@@ -94,7 +94,7 @@ fn diag(
     let size = matrix.width as isize + margin + margin;
     let end = matrix.width as isize + margin;
 
-    let get_matrix = |x, y| -> bool {
+    let get_matrix = |x, y| {
         if y < margin || y >= end || x < margin || x >= end {
             return false;
         }

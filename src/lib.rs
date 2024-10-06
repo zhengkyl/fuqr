@@ -9,6 +9,7 @@ pub mod bit_info;
 pub mod mask;
 pub mod matrix;
 pub mod qr_code;
+pub mod qart;
 
 pub mod render;
 

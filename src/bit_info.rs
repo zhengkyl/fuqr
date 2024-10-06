@@ -1,11 +1,9 @@
 use std::ops::BitOrAssign;
 
 use crate::{
-    constants::{GEN_POLYNOMIALS, NUM_BLOCKS, NUM_DATA_MODULES, NUM_EC_CODEWORDS},
-    data::{BitVec, Data},
-    error_correction::remainder,
+    constants::{NUM_BLOCKS, NUM_DATA_MODULES, NUM_EC_CODEWORDS},
     matrix::{Matrix, Module},
-    qr_code::{mask_fn, Mask, Mode, QrCode, Version, ECL},
+    qr_code::{Mask, Mode, Version, ECL},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,23 +40,6 @@ impl From<Module> for Info {
 impl BitOrAssign<Module> for Info {
     fn bitor_assign(&mut self, rhs: Module) {
         self.module |= rhs;
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct WeightBit(pub u8);
-
-impl WeightBit {
-    pub fn new(value: bool, hardness: u8) -> Self {
-        WeightBit(value as u8 | (hardness << 1))
-    }
-    /// 1 or 0
-    pub fn value(&self) -> u8 {
-        self.0 & 1
-    }
-    /// 0 - 127 representing how important current value is
-    pub fn hardness(&self) -> u8 {
-        self.0 >> 1
     }
 }
 
@@ -106,7 +87,6 @@ impl BitInfo {
         let group_1_blocks = blocks - group_2_blocks;
 
         let data_per_g1_block = num_data_codewords / blocks;
-        let ecc_per_block = num_ec_codewords / blocks;
 
         let data_end = num_data_codewords * 8;
         let ecc_end = codewords * 8;
@@ -143,11 +123,6 @@ impl BitInfo {
 
                 block_i = row;
                 bit_i = col * 8;
-                // bit_i = if row < group_1_blocks {
-                //     ((row * data_per_g1_block) + col) * 8
-                // } else {
-                //     ((row * data_per_g1_block) + (row - group_1_blocks) + col) * 8
-                // };
             } else if i < ecc_end {
                 let ecc_i = (i / 8) - num_data_codewords;
                 let col = ecc_i / blocks;
@@ -155,16 +130,11 @@ impl BitInfo {
 
                 block_i = row;
 
-                // TODO KYLE HERE
-                // I BELIEVE THIS IS WRONG
-                // BIT_I is index into BLOCK
                 bit_i = if row < group_1_blocks {
                     (data_per_g1_block + col) * 8
                 } else {
                     (data_per_g1_block + 1 + col) * 8
                 }
-                // bit_i = col * 8;
-                // bit_i = (row * ecc_per_block + col) * 8;
             } else {
                 block_i = 0;
                 bit_i = 0;
@@ -176,235 +146,3 @@ impl BitInfo {
         bit_info
     }
 }
-
-#[derive(Debug)]
-pub struct QartCode<'a> {
-    pub bit_info: BitInfo,
-    pub initials: Vec<BitVec>,
-    pub blocks: Vec<Vec<WeightBit>>,
-    pub data: &'a mut Data,
-}
-
-impl<'a> QartCode<'a> {
-    pub fn new(data: &'a mut Data, mask: Mask) -> Self {
-        let modules = NUM_DATA_MODULES[data.version.0] as usize;
-        let codewords = modules / 8;
-
-        let num_ec_codewords = NUM_EC_CODEWORDS[data.version.0][data.ecl as usize] as usize;
-        let num_data_codewords = codewords - num_ec_codewords;
-
-        let blocks = NUM_BLOCKS[data.version.0][data.ecl as usize] as usize;
-
-        let group_2_blocks = codewords % blocks;
-        let group_1_blocks = blocks - group_2_blocks;
-
-        let data_per_g1_block = num_data_codewords / blocks;
-        let ecc_per_block = num_ec_codewords / blocks;
-
-        // terminator seems required
-        let remainder_data_bits = (num_data_codewords * 8) - (data.bits.len());
-        let term_len = if remainder_data_bits < 4 {
-            remainder_data_bits
-        } else {
-            4
-        };
-
-        data.bits.push_n(0, term_len);
-        let orig_data_bit_len = data.bits.len();
-        if data.bits.value.len() < num_data_codewords {
-            data.bits.value.resize(num_data_codewords, 0);
-        }
-
-        let mut initials = vec![];
-        let mut blocks = vec![];
-        let mut data_i = 0;
-
-        for i in 0..(group_1_blocks + group_2_blocks) as usize {
-            let data_per_block = if i < group_1_blocks as usize {
-                data_per_g1_block
-            } else {
-                data_per_g1_block + 1
-            };
-
-            let byte_start = data_i / 8;
-            let mut data_codewords =
-                data.bits.value[byte_start..(byte_start + data_per_block)].to_vec();
-            let mut ecc = remainder(
-                &data_codewords,
-                &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
-            );
-            data_codewords.append(&mut ecc);
-            initials.push(data_codewords.into());
-
-            blocks.push(Vec::with_capacity(data_per_block + ecc_per_block));
-            for j in 0..(data_per_block + ecc_per_block) * 8 {
-                if data_i < orig_data_bit_len && j < (data_per_block * 8) {
-                    let on = data.bits.get(data_i) == 1;
-                    blocks[i].push(WeightBit::new(on, 127));
-                    data_i += 1;
-                } else {
-                    blocks[i].push(WeightBit::new(false, 0));
-                }
-            }
-        }
-
-        QartCode {
-            bit_info: BitInfo::new(data.mode, data.version, data.ecl, mask),
-            initials,
-            blocks,
-            data,
-        }
-    }
-
-    pub fn to_qr_code(mut self, image: Vec<bool>) -> QrCode {
-        self.data.bits.push_n(0, 0);
-
-        let width = self.data.version.0 * 4 + 17;
-
-        let modules = NUM_DATA_MODULES[self.data.version.0] as usize;
-        let codewords = modules / 8;
-
-        let num_ec_codewords =
-            NUM_EC_CODEWORDS[self.data.version.0][self.data.ecl as usize] as usize;
-        let num_data_codewords = codewords - num_ec_codewords;
-
-        let blocks = NUM_BLOCKS[self.data.version.0][self.data.ecl as usize] as usize;
-
-        let group_2_blocks = codewords % blocks;
-        let group_1_blocks = blocks - group_2_blocks;
-
-        let data_per_g1_block = num_data_codewords / blocks;
-        let ecc_per_block = num_ec_codewords / blocks;
-
-        let margin = 6;
-        let img_width = width - 2 * margin;
-        assert_eq!(image.len(), img_width * img_width);
-
-        let mask = mask_fn(self.bit_info.mask);
-
-        for y in 0..width {
-            for x in 0..width {
-                let bit = self.bit_info.matrix.get(x, y);
-                if !bit.module.has(Module::DATA) || bit.module == Info::REMAINDER {
-                    continue;
-                }
-
-                let pbit = self.blocks[bit.block_i][bit.bit_i];
-                if pbit.hardness() < 127 {
-                    if x > margin && y > margin && x < width - 1 - margin && y < width - 1 - margin
-                    {
-                        let value = mask(x as u16, y as u16)
-                            ^ image[(y - margin) * img_width + (x - margin)];
-                        self.blocks[bit.block_i][bit.bit_i] = WeightBit::new(value, 64)
-                    }
-                }
-            }
-        }
-
-        let mut g1_basis = vec![];
-        for i in 0..data_per_g1_block * 8 {
-            let mut v: BitVec = vec![0; data_per_g1_block].into();
-            v.set(i);
-            v.value.append(&mut remainder(
-                &v.value,
-                &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
-            ));
-            g1_basis.push(v);
-        }
-
-        let mut g2_basis = vec![];
-        for i in 0..(data_per_g1_block + 1) * 8 {
-            let mut v: BitVec = vec![0; data_per_g1_block + 1].into();
-            v.set(i);
-            v.value.append(&mut remainder(
-                &v.value,
-                &GEN_POLYNOMIALS[ecc_per_block][..ecc_per_block],
-            ));
-            g2_basis.push(v);
-        }
-
-        for i in 0..group_1_blocks {
-            find_closest_match(&g1_basis, &mut self.initials[i], &self.blocks[i]);
-        }
-        for i in 0..group_2_blocks {
-            find_closest_match(
-                &g2_basis,
-                &mut self.initials[group_1_blocks + i],
-                &self.blocks[group_1_blocks + i],
-            );
-        }
-
-        let mut matrix = Matrix::new(self.data.version, Module(0));
-
-        let width = self.data.version.0 * 4 + 17;
-        for y in 0..width {
-            for x in 0..width {
-                let info = self.bit_info.matrix.get(x, y);
-
-                if !info.module.has(Module::DATA) {
-                    matrix.set(x, y, info.module);
-                } else if info.module == Info::REMAINDER {
-                    let on = mask(x as u16, y as u16) as u8 ^ image[y * width + x] as u8;
-                    matrix.set(x, y, Module::DATA | (Module(on)));
-                } else {
-                    let on = mask(x as u16, y as u16) as u8
-                        ^ self.initials[info.block_i].get(info.bit_i);
-                    matrix.set(x, y, Module::DATA | Module(on));
-                }
-            }
-        }
-
-        QrCode {
-            matrix,
-            mode: self.data.mode,
-            version: self.data.version,
-            ecl: self.data.ecl,
-            mask: self.bit_info.mask,
-        }
-        // if dividing data by generator,
-        // the data that produces a remainder = desired remainder + generator
-        //
-        // basis matrix = data bits * data bits , width height
-    }
-}
-
-fn find_closest_match(basis_matrix: &Vec<BitVec>, initial: &mut BitVec, desired: &Vec<WeightBit>) {
-    let mut basis_matrix: Vec<Option<BitVec>> = basis_matrix
-        .iter()
-        .map(|basis| Some(basis.value.clone().into()))
-        .collect();
-
-    for (i, weight_bit) in desired.iter().enumerate() {
-        if weight_bit.hardness() == 0 {
-            continue;
-        }
-
-        let mut found: Option<BitVec> = None;
-        for basis_opt in basis_matrix.iter_mut() {
-            if let Some(basis) = basis_opt {
-                if basis.get(i) == 0 {
-                    continue;
-                }
-                if let Some(prev) = found.as_ref() {
-                    for k in 0..basis.value.len() {
-                        basis.value[k] ^= prev.value[k]
-                    }
-                } else {
-                    found = basis_opt.take();
-                }
-            }
-        }
-
-        if found.is_none() {
-            continue;
-        }
-
-        if initial.get(i) != weight_bit.value() {
-            let prev = found.unwrap();
-            for j in 0..prev.value.len() {
-                initial.value[j] ^= prev.value[j];
-            }
-        }
-    }
-}
-
