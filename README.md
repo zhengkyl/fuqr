@@ -67,6 +67,32 @@ let data = Data::new_verbose(
 
 All example code is WIP and in a very unpolished state.
 
+### `/examples/bad_apple.rs`
+
+Creating improved [QArt codes](https://research.swtch.com/qart). Basically, you can just set the character count indicator. This gives complete control over padding and doesn't include garbage data in decoded message.
+
+I first saw this improvement from https://github.com/xyzzy/qrpicture (actual code not available).
+
+My implementation of controlling pixels is based on https://github.com/andrewyur/qart.
+
+| No changes (low scannability animation)                                                       | Patterns + Low FPS                                                                  |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [<img width="300" src="./examples/bad_apple_1.png"/>](https://youtu.be/1ems029Rln4) | [<img width="300" src="./examples/bad_apple_2.png"/>](https://youtu.be/8HG8HJ7tbO8) |
+
+```sh
+# place video at ./examples/bad_apple/bad_apple.mp4
+# i'm using the 3:40 one
+
+# generates frames in ./examples/bad_apple/frames
+cargo run --example bad_apple
+
+# combines frames into mp4
+ffmpeg -framerate 5 -pattern_type glob -i 'examples/bad_apple/frames/*.png' -c:v libx264 -pix_fmt yuv420p -vf "scale=iw*10:ih*10:flags=neighbor" frames.mp4
+
+# combines frames with audio
+ffmpeg -i frames.mp4 -i examples/bad_apple/bad_apple.mp4 -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -shortest out.mp4
+```
+
 ### `/examples/scale.rs`
 
 Scaling modules based on position.

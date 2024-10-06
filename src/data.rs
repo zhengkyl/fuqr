@@ -128,8 +128,8 @@ impl BitVec {
             len: 0,
         }
     }
-    pub fn resize(&mut self, new_len: usize) {
-        self.value.resize((new_len + 7) / 8, 0);
+    pub fn resize(&mut self, new_len: usize, byte: u8) {
+        self.value.resize((new_len + 7) / 8, byte);
         self.len = new_len;
     }
     /// self must be byte aligned

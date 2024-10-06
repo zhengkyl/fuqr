@@ -60,7 +60,7 @@ impl QArtCode {
         if data.bits.len() < num_data_codewords * 8 {
             // TODO filling with 0 creates checkerboard
             // perhaps fill with random noise
-            data.bits.resize(num_data_codewords * 8);
+            data.bits.resize(num_data_codewords * 8, 0b11101100);
         }
 
         let mut blocks = vec![];
