@@ -5,7 +5,7 @@ feeling unemployed qr code generator
 ## Usage
 
 ```rs
-let qr_code = generate("https://github.com/zhengkyl/fuqr", QrOptions::new()).unwrap();
+let qr_code = generate("https://github.com/zhengkyl/fuqr", &QrOptions::new()).unwrap();
 ```
 
 This is what `QrOptions::new()` looks like.
@@ -27,13 +27,25 @@ QrOptions {
 
 `QrError::ExceedsMaxCapacity` is what it sounds like, but unless `strict_version` is set to true, this is very hard to trigger. The lower limit is exceeding 1273 characters with `Mode::Byte` and `ECL::High`. See [capacity table](https://www.thonky.com/qr-code-tutorial/character-capacities) for specifics.
 
-### NOTE
+### QArt Codes
 
-- MASK SCORING IS (probably) NOT IMPLEMENTED CORRECTLY
+Based on Russ Cox's [QArt codes](https://research.swtch.com/qart) with one improvement. The decoded message doesn't contain extra garbage data, because only the padding bits are manipulated.
+I first saw this improvement from https://github.com/xyzzy/qrpicture (actual code not available).
 
-I haven't bothered fixing the code, because it's annoying. There's probably no perceptible benefit to picking one mask over another, and even if there is it's probably barely better than random choice.
+```rs
+let version = Version::new(13);
+let qr_width = version.0 * 4 + 17;
+let pixel_weights = vec![WeightPixel::new(false, 0); qr_width * qr_width];
+let qr_code = generate_qart(
+    "https://github.com/zhengkyl/fuqr",
+    &QrOptions::new().min_version(version),
+    &pixel_weights
+).unwrap();
+```
 
-### Low level usage
+`generate_qart()` has the same errors as `generate()` along with `QartError::InvalidPixelWeights` if the size of `pixel_weights` doesn't match the size of the QR code matrix.
+
+### Advanced Usage
 
 ```rs
 // This returns None if input string exceeds max capacity
@@ -43,16 +55,7 @@ let data = Data::new(
     Version(1), // minimum Version
     ECL::Low, // minimum ECL
 ).unwrap();
-
-// Pass None to determine and use "best" mask
-let qr_code = QrCode::new(data, Some(Mask::M1));
-```
-
-The encoding `Mode` must be specified and no errors are thrown if it's invalid. This is fine because it's probably always `Mode::Byte`.
-
-Alternatively, use `Data::new_verbose()` to force `Version` and `ECL` to not upgrade. There is no real usecase for this.
-
-```rs
+// OR
 let data = Data::new_verbose(
     "https://github.com/zhengkyl/fuqr",
     Mode::Byte,
@@ -61,7 +64,27 @@ let data = Data::new_verbose(
     ECL::Low,
     true, // strict ECL
 ).unwrap();
+
+// Pass None to determine and use "best" mask
+let qr_code = QrCode::new(data, Some(Mask::M1));
 ```
+
+The encoding `Mode` must be specified and no errors are thrown if it's invalid. This is fine because it's probably always `Mode::Byte`.
+
+The `strict` arguments force `Version` and `ECL` to not upgrade. There is no real usecase for this.
+
+```rs
+// data from above
+let mask = Mask::M0;
+let bit_info = BitInfo::new(data.mode, data.version, data.ecl, mask);
+```
+
+`BitInfo` is like `QrCode`, but it stores the role of each bit/pixel for the specified `Mode`, `Version`, `ECL`, `Mask` combination. Specifically for data pixels, it tracks whether it is a data, error correction, or remainder bit, as well as its error correction block and index within said block.
+
+### NOTE
+
+- MASK SCORING IS (probably) NOT IMPLEMENTED CORRECTLY
+  - I haven't bothered fixing the code, because it's annoying and probably pointless.
 
 ## Examples
 
@@ -69,13 +92,9 @@ All example code is WIP and in a very unpolished state.
 
 ### `/examples/bad_apple.rs`
 
-Creating improved [QArt codes](https://research.swtch.com/qart). Basically, you can just set the character count indicator. This gives complete control over padding and doesn't include garbage data in decoded message.
+Animated QArt codes.
 
-I first saw this improvement from https://github.com/xyzzy/qrpicture (actual code not available).
-
-My implementation of controlling pixels is based on https://github.com/andrewyur/qart.
-
-| No changes (low scannability animation)                                                       | Patterns + Low FPS                                                                  |
+| [Naive (low scannability)](https://youtu.be/1ems029Rln4)                            | [Patterns + Low FPS](https://youtu.be/8HG8HJ7tbO8)                                  |
 | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | [<img width="300" src="./examples/bad_apple_1.png"/>](https://youtu.be/1ems029Rln4) | [<img width="300" src="./examples/bad_apple_2.png"/>](https://youtu.be/8HG8HJ7tbO8) |
 
@@ -137,22 +156,18 @@ See [Halftone QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphic
   - https://github.com/zxing/zxing
   - https://github.com/opencv/opencv_contrib/tree/4.x/modules/wechat_qrcode (fork of zxing-cpp)
 
-### TODO
-
-- [x] send typed array to wasm
-
 ### Benchmarks
 
-It's kinda slow, but this is probably not the bottleneck.
+My benchmarks seem to vary ~30% from run to run. My takeaway is that `fuqr` is kinda slow, but this is probably not the bottleneck. 
 
-| Test     | Implementation | Time (µs) / (ms)   | Compared to `fast_qr` |
+| Test     | Implementation | Time               | Compared to `fast_qr` |
 | -------- | -------------- | ------------------ | --------------------- |
-| **V03H** | fuqr           | 81.458 - 85.391 µs | ~1.3 slower           |
-|          | qrcode         | 299.16 - 309.98 µs | ~4.8 slower           |
-|          | fast_qr        | 63.305 - 64.625 µs | 1.0 (Fastest)         |
-| **V10H** | fuqr           | 394.21 - 408.01 µs | ~1.7 slower           |
-|          | qrcode         | 1.3011 - 1.3232 ms | ~5.5 slower           |
-|          | fast_qr        | 238.47 - 243.73 µs | 1.0 (Fastest)         |
-| **V40H** | fuqr           | 3.1761 - 3.2767 ms | ~1.4 slower           |
-|          | qrcode         | 11.228 - 11.683 ms | ~5.0 slower           |
-|          | fast_qr        | 2.2569 - 2.3325 ms | 1.0 (Fastest)         |
+| **V03H** | fuqr           | 71.225 - 73.230 µs | ~1.01x slower         |
+|          | qrcode         | 541.65 - 569.61 µs | ~7.8x slower          |
+|          | fast_qr        | 70.581 - 72.627 µs | 1.0 (Fastest)         |
+| **V10H** | fuqr           | 365.81 - 372.89 µs | ~1.4x slower          |
+|          | qrcode         | 2.2897 - 2.3480 ms | ~8.7x slower          |
+|          | fast_qr        | 262.86 - 270.61 µs | 1.0 (Fastest)         |
+| **V40H** | fuqr           | 3.0942 - 3.1684 ms | ~1.3x slower          |
+|          | qrcode         | 21.502 - 21.952 ms | ~8.8x slower          |
+|          | fast_qr        | 2.4293 - 2.4919 ms | 1.0 (Fastest)         |

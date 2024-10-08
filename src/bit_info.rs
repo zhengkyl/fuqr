@@ -11,9 +11,9 @@ pub struct Info {
     /// Module except meaning changes when DATA set
     pub module: Module,
     /// 0-indexed error correction block
-    pub block_i: usize,
-    /// 0-indexed bit index
-    pub bit_i: usize,
+    pub block: u8,
+    /// bit index within block
+    pub bit: u16,
 }
 
 impl Info {
@@ -31,8 +31,8 @@ impl From<Module> for Info {
     fn from(module: Module) -> Self {
         Info {
             module,
-            block_i: 0,
-            bit_i: 0,
+            block: 0,
+            bit: 0,
         }
     }
 }
@@ -59,8 +59,8 @@ impl BitInfo {
                 version,
                 Info {
                     module: Module(0),
-                    block_i: 0,
-                    bit_i: 0,
+                    block: 0,
+                    bit: 0,
                 },
             ),
             mode,
@@ -92,8 +92,8 @@ impl BitInfo {
         let ecc_end = codewords * 8;
 
         let mut i = 0;
-        let mut block_i = 0;
-        let mut bit_i = 0;
+        let mut block = 0;
+        let mut bit = 0;
 
         bit_info.matrix.set_data(|| {
             let val = Info {
@@ -102,10 +102,10 @@ impl BitInfo {
                     j if j < ecc_end * 8 => Info::EC,
                     _ => Info::REMAINDER,
                 },
-                block_i,
-                bit_i,
+                block,
+                bit,
             };
-            bit_i += 1;
+            bit += 1;
             i += 1;
 
             if i % 8 != 0 {
@@ -121,23 +121,23 @@ impl BitInfo {
                     (byte_i + group_1_blocks) % blocks
                 };
 
-                block_i = row;
-                bit_i = col * 8;
+                block = row as u8;
+                bit = (col * 8) as u16;
             } else if i < ecc_end {
                 let ecc_i = (i / 8) - num_data_codewords;
                 let col = ecc_i / blocks;
                 let row = ecc_i % blocks;
 
-                block_i = row;
+                block = row as u8;
 
-                bit_i = if row < group_1_blocks {
+                bit = if row < group_1_blocks {
                     (data_per_g1_block + col) * 8
                 } else {
                     (data_per_g1_block + 1 + col) * 8
-                }
+                } as u16
             } else {
-                block_i = 0;
-                bit_i = 0;
+                block = 0;
+                bit = 0;
             }
 
             val

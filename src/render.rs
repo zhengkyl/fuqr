@@ -3,8 +3,10 @@ pub mod svg;
 #[cfg(feature = "text")]
 pub mod text;
 
+#[cfg(feature = "svg")]
 use crate::qr_code::QrCode;
 
+#[cfg(feature = "svg")]
 pub struct RenderData<'m> {
     qr_code: &'m QrCode,
     foreground: String,
@@ -14,12 +16,14 @@ pub struct RenderData<'m> {
     toggle_options: u8,
 }
 
+#[cfg(feature = "svg")]
 pub enum Toggle {
     Background,
     BackgroundPixels,
     ForegroundPixels,
 }
 
+#[cfg(feature = "svg")]
 impl<'m> RenderData<'m> {
     pub fn new(qr_code: &'m QrCode) -> Self {
         RenderData {

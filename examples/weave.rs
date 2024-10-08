@@ -195,7 +195,7 @@ fn diag(
 }
 
 fn main() -> Result<(), ImageError> {
-    let qr_code = generate("https://github.com/zhengkyl/fuqr", QrOptions::new()).unwrap();
+    let qr_code = generate("https://github.com/zhengkyl/fuqr", &QrOptions::new()).unwrap();
 
     let img_buf = weave(&qr_code.matrix, 1, false);
     img_buf.save("tmp/weave_thick.png").unwrap();

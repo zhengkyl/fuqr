@@ -5,10 +5,11 @@ pub mod data;
 pub mod encoding;
 pub mod error_correction;
 
-pub mod bit_info;
 pub mod mask;
 pub mod matrix;
 pub mod qr_code;
+
+pub mod bit_info;
 pub mod qart;
 
 pub mod render;
@@ -19,7 +20,9 @@ mod wasm;
 use crate::data::Data;
 use crate::qr_code::{Mask, Mode, Version, ECL};
 use encoding::encoding_mode;
+use qart::{Qart, WeightPixel};
 use qr_code::QrCode;
+
 #[cfg(feature = "wasm")]
 use wasm_bindgen::prelude::*;
 
@@ -80,7 +83,51 @@ pub enum QrError {
     ExceedsMaxCapacity,
 }
 
-pub fn generate(input: &str, qr_options: QrOptions) -> Result<QrCode, QrError> {
+pub fn generate(input: &str, qr_options: &QrOptions) -> Result<QrCode, QrError> {
+    match resolve_data(input, qr_options) {
+        Ok(data) => Ok(QrCode::new(data, qr_options.mask)),
+        Err(err) => Err(err),
+    }
+}
+
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum QartError {
+    InvalidEncoding,
+    ExceedsMaxCapacity,
+    InvalidPixelWeights,
+}
+
+impl From<QrError> for QartError {
+    fn from(value: QrError) -> Self {
+        match value {
+            QrError::InvalidEncoding => QartError::InvalidEncoding,
+            QrError::ExceedsMaxCapacity => QartError::ExceedsMaxCapacity,
+        }
+    }
+}
+
+pub fn generate_qart(
+    input: &str,
+    qr_options: &QrOptions,
+    pixel_weights: &[WeightPixel],
+) -> Result<QrCode, QartError> {
+    let data = match resolve_data(input, qr_options) {
+        Ok(data) => data,
+        Err(err) => return Err(err.into()),
+    };
+
+    let qr_width = data.version.0 * 4 + 17;
+    if pixel_weights.len() != qr_width * qr_width {
+        return Err(QartError::InvalidPixelWeights);
+    }
+
+    let qart = Qart::new(data, qr_options.mask.unwrap_or(Mask::M0));
+    let qr_code = qart.to_qr_code(&pixel_weights);
+    Ok(qr_code)
+}
+
+fn resolve_data(input: &str, qr_options: &QrOptions) -> Result<Data, QrError> {
     let mut mode = Mode::Byte;
 
     if let Some(specified) = qr_options.mode {
@@ -104,12 +151,8 @@ pub fn generate(input: &str, qr_options: QrOptions) -> Result<QrCode, QrError> {
         qr_options.strict_ecl,
     );
 
-    let data = match data {
-        Some(x) => x,
-        None => return Err(QrError::ExceedsMaxCapacity),
-    };
-
-    let matrix = qr_code::QrCode::new(data, qr_options.mask);
-
-    Ok(matrix)
+    match data {
+        Some(x) => Ok(x),
+        None => Err(QrError::ExceedsMaxCapacity),
+    }
 }

@@ -1,8 +1,9 @@
 use fuqr::{
-    data::Data,
+    generate_qart,
     matrix::Module,
-    qart::{QArtCode, WeightPixel},
-    qr_code::{Mask, Mode, Version, ECL},
+    qart::WeightPixel,
+    qr_code::{Mode, Version},
+    QrOptions,
 };
 use image::{ImageBuffer, Rgb};
 
@@ -79,18 +80,6 @@ fn main() {
 }
 
 fn save_qr_frame(frame: &[u8], frame_stride: usize, frame_index: u32) {
-    let data = Data::new_verbose(
-        &get_lyric(frame_index / 3),
-        Mode::Byte,
-        Version(QR_VERSION),
-        false,
-        ECL::Low,
-        true,
-    )
-    .unwrap();
-
-    let qart = QArtCode::new(data, Mask::M0);
-
     let mut weights = vec![WeightPixel::new(false, 0); QR_WIDTH * QR_WIDTH];
     for y in 0..IMG_HEIGHT {
         for x in 0..IMG_WIDTH {
@@ -118,7 +107,12 @@ fn save_qr_frame(frame: &[u8], frame_stride: usize, frame_index: u32) {
         }
     }
 
-    let qr_code = qart.to_qr_code(&weights);
+    let qr_options = QrOptions::new()
+        .mode(Some(Mode::Byte))
+        .min_version(Version(QR_VERSION))
+        .strict_version(true)
+        .strict_ecl(true);
+    let qr_code = generate_qart(&get_lyric(frame_index / 3), &qr_options, &weights).unwrap();
 
     let margin = 2;
     let out_width = QR_WIDTH + 2 * margin;

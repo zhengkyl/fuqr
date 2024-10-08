@@ -161,7 +161,7 @@ fn draw_qr(
 }
 
 fn main() -> Result<(), ImageError> {
-    let qr_code = generate("https://github.com/zhengkyl/fuqr", QrOptions::new()).unwrap();
+    let qr_code = generate("https://github.com/zhengkyl/fuqr", &QrOptions::new()).unwrap();
 
     overlay(
         &qr_code.matrix,

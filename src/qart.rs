@@ -11,10 +11,11 @@ use crate::{
 pub struct WeightPixel(pub u8);
 
 impl WeightPixel {
-    pub fn new(value: bool, hardness: u8) -> Self {
-        WeightPixel(value as u8 | (hardness << 1))
+    /// value representing on/off, weight from 0 - 127  
+    pub fn new(value: bool, weight: u8) -> Self {
+        WeightPixel(value as u8 | (weight << 1))
     }
-    /// 1 or 0
+    /// on or off
     pub fn value(&self) -> bool {
         self.0 & 1 == 1
     }
@@ -25,13 +26,13 @@ impl WeightPixel {
 }
 
 #[derive(Debug)]
-pub struct QArtCode {
+pub struct Qart {
     pub bit_info: BitInfo,
     pub blocks: Vec<BitVec>,
     pub block_weights: Vec<Vec<WeightPixel>>,
 }
 
-impl QArtCode {
+impl Qart {
     pub fn new(mut data: Data, mask: Mask) -> Self {
         let modules = NUM_DATA_MODULES[data.version.0] as usize;
         let codewords = modules / 8;
@@ -95,16 +96,16 @@ impl QArtCode {
             }
         }
 
-        QArtCode {
+        Qart {
             bit_info: BitInfo::new(data.mode, data.version, data.ecl, mask),
             blocks,
             block_weights,
         }
     }
 
-    pub fn to_qr_code(mut self, img_weights: &Vec<WeightPixel>) -> QrCode {
+    pub fn to_qr_code(mut self, pixel_weights: &[WeightPixel]) -> QrCode {
         let width = self.bit_info.version.0 * 4 + 17;
-        assert_eq!(img_weights.len(), width * width);
+        assert_eq!(pixel_weights.len(), width * width);
 
         let modules = NUM_DATA_MODULES[self.bit_info.version.0] as usize;
         let codewords = modules / 8;
@@ -131,11 +132,11 @@ impl QArtCode {
                 }
 
                 // TODO reconsider randomizing "dead" pixels
-                // must be in image, and maybe needs to not be random to notice
-                if self.block_weights[bit.block_i][bit.bit_i].weight() < 127 {
-                    let value = mask(x as u16, y as u16) ^ img_weights[y * width + x].value();
-                    self.block_weights[bit.block_i][bit.bit_i] =
-                        WeightPixel::new(value, img_weights[y * width + x].weight())
+                // must be in image, and needs to not depend on order
+                if self.block_weights[bit.block as usize][bit.bit as usize].weight() < 127 {
+                    let value = mask(x as u16, y as u16) ^ pixel_weights[y * width + x].value();
+                    self.block_weights[bit.block as usize][bit.bit as usize] =
+                        WeightPixel::new(value, pixel_weights[y * width + x].weight())
                 }
             }
         }
@@ -182,10 +183,11 @@ impl QArtCode {
                 if !info.module.has(Module::DATA) {
                     matrix.set(x, y, info.module);
                 } else if info.module == Info::REMAINDER {
-                    let on = mask(x as u16, y as u16) ^ img_weights[y * width + x].value();
+                    let on = mask(x as u16, y as u16) ^ pixel_weights[y * width + x].value();
                     matrix.set(x, y, Module::DATA | (Module(on as u8)));
                 } else {
-                    let on = mask(x as u16, y as u16) ^ self.blocks[info.block_i].get(info.bit_i);
+                    let on = mask(x as u16, y as u16)
+                        ^ self.blocks[info.block as usize].get(info.bit as usize);
                     matrix.set(x, y, Module::DATA | Module(on as u8));
                 }
             }

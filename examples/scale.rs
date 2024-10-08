@@ -155,7 +155,7 @@ fn waves(matrix: &Matrix<Module>) -> Result<(), ImageError> {
 }
 
 fn main() -> Result<(), ImageError> {
-    let qr_code = generate("https://github.com/zhengkyl/fuqr", QrOptions::new()).unwrap();
+    let qr_code = generate("https://github.com/zhengkyl/fuqr", &QrOptions::new()).unwrap();
 
     circle(&qr_code.matrix)?;
     stripes(&qr_code.matrix)?;

@@ -9,9 +9,8 @@ readme = "README.md"
 exclude = [".gitignore", "benches/", "examples/"]
 
 [features]
-default = ["text"]
-wasm = ["dep:wasm-bindgen", "dep:wee_alloc", "dep:js-sys"]
-console_error_panic_hook = ["dep:console_error_panic_hook"]
+default = ["wasm"]
+wasm = ["dep:wasm-bindgen", "dep:wee_alloc", "dep:js-sys", "dep:console_error_panic_hook"]
 text = []
 svg = []
 
