@@ -18,7 +18,7 @@ pub fn generate(input: &str, qr_options: &QrOptions) -> Result<JsValue, QrError>
     Ok(qr_code_to_obj(qr_code))
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_name = generateQart)]
 pub fn generate_qart(
     input: &str,
     qr_options: &QrOptions,

@@ -1,15 +1,15 @@
 [package]
 name = "fuqr"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 description = "feeling unemployed qr code generator"
 repository = "https://github.com/zhengkyl/fuqr"
-license-file = "LICENSE"
+license = "MIT"
 readme = "README.md"
 exclude = [".gitignore", "benches/", "examples/"]
 
 [features]
-default = ["wasm"]
+default = []
 wasm = ["dep:wasm-bindgen", "dep:wee_alloc", "dep:js-sys", "dep:console_error_panic_hook"]
 text = []
 svg = []
