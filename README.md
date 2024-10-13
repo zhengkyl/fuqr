@@ -30,7 +30,9 @@ QrOptions {
 ### QArt Codes
 
 Based on Russ Cox's [QArt codes](https://research.swtch.com/qart) with one improvement. The decoded message doesn't contain extra garbage data, because only the padding bits are manipulated.
-I first saw this improvement from https://github.com/xyzzy/qrpicture (actual code not available).
+
+This improved process was first published in [Expansion of Image Displayable Area in Design QR Code
+and Its Applications, 2011](https://www.ieice.org/publications/conferences/summary.php?id=FIT0000009019&expandable=2&ConfCd=F&session_num=4V&lecture_number=O-006&year=2011&conf_type=F) which actually predates QArt codes. (I only just found this so my implementation differs (not as good) from the method described.)
 
 ```rs
 let version = Version::new(13);
@@ -112,6 +114,16 @@ ffmpeg -framerate 5 -pattern_type glob -i 'examples/bad_apple/frames/*.png' -c:v
 ffmpeg -i frames.mp4 -i examples/bad_apple/bad_apple.mp4 -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -shortest out.mp4
 ```
 
+### `/examples/nesting.rs`
+
+| Nesting dolls                                | Donut holes                                    |
+| -------------------------------------------- | ---------------------------------------------- |
+| ![nesting doll](./examples/nesting_doll.png) | ![nesting donut](./examples/nesting_donut.png) |
+
+The "nesting dolls" is just QArt codes applied recursively. This seems to work best with only one layer of nesting though, because middle layers are hard to scan.
+
+The "donut holes" is the same technique as in the layering examples. As explained in this paper, [Dual-Message QR Codes](https://www.mdpi.com/1424-8220/24/10/3055), a scanner only uses the center pixel of each square, but from a distance this center pixel represents a larger area. Thus the decoded message depends on scanning distance.
+
 ### `/examples/scale.rs`
 
 Scaling modules based on position.
@@ -158,7 +170,7 @@ See [Halftone QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphic
 
 ### Benchmarks
 
-My benchmarks seem to vary ~30% from run to run. My takeaway is that `fuqr` is kinda slow, but this is probably not the bottleneck. 
+My benchmarks seem to vary ~30% from run to run. My takeaway is that `fuqr` is kinda slow, but this is probably not the bottleneck.
 
 | Test     | Implementation | Time               | Compared to `fast_qr` |
 | -------- | -------------- | ------------------ | --------------------- |
