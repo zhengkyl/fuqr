@@ -183,15 +183,15 @@ impl<T: Copy + From<Module> + Into<Module> + BitOrAssign<Module>> Matrix<T> {
         }
     }
 
-    /// This must run AFTER everything else placed
+    /// This must run AFTER alignment, timing, version placed
     pub fn set_data(&mut self, mut get_value: impl FnMut() -> T) {
         let mut col = self.width - 1;
         let mut row = self.width - 1;
 
         let mut row_dir = -1;
-        let mut row_limit = 8;
+        let mut row_end = 9;
 
-        let mut top_bot_gap = (self.width - 9) as isize;
+        let mut row_len = (self.width - 10) as isize;
 
         loop {
             loop {
@@ -201,7 +201,7 @@ impl<T: Copy + From<Module> + Into<Module> + BitOrAssign<Module>> Matrix<T> {
                 if self.get(col - 1, row).into() == Module(0) {
                     self.set(col - 1, row, get_value());
                 }
-                if row == row_limit {
+                if row == row_end {
                     break;
                 }
                 row = ((row as isize) + row_dir) as usize;
@@ -216,20 +216,20 @@ impl<T: Copy + From<Module> + Into<Module> + BitOrAssign<Module>> Matrix<T> {
 
             // passed first finder
             if col == self.width - 9 {
-                top_bot_gap = (self.width - 1) as isize;
-                row_limit = 0;
+                row_len = (self.width - 1) as isize;
+                row_end = 0;
             }
             // between left finders
             else if col == 8 {
-                top_bot_gap = (self.width - 17) as isize;
-                row_limit = 8;
+                row_len = (self.width - 18) as isize;
+                row_end = 9;
                 row = self.width - 9;
             } else {
                 // vertical timing belt
                 if col == 6 {
                     col -= 1;
                 }
-                row_limit = (row_limit as isize + top_bot_gap * row_dir) as usize;
+                row_end = (row_end as isize + row_len * row_dir) as usize;
             }
         }
     }

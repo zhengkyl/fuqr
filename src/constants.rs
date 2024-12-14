@@ -1,5 +1,5 @@
 use crate::{
-    math::{ANTILOG_TABLE, LOG_TABLE},
+    math::{EXP_TABLE, LOG_TABLE},
     qr_code::ECL,
 };
 
@@ -156,12 +156,12 @@ const fn gen_polynomials() -> [[u8; 30]; 31] {
             // coefficient of same power from previous polynomial (multiplied by a^i-1)
             let exp = ((table[i - 1][j - 1] as usize + i - 1) % 255) as u8;
             // coefficient of 1 lesser power from previous polynomial (multiplied by x)
-            let coeff = ANTILOG_TABLE[table[i - 1][j] as usize] ^ ANTILOG_TABLE[exp as usize];
+            let coeff = EXP_TABLE[table[i - 1][j] as usize] ^ EXP_TABLE[exp as usize];
             table[i][j] = LOG_TABLE[coeff as usize];
             j -= 1;
         }
         // Same logic as above, b/c first coefficient always 0
-        let coeff = ANTILOG_TABLE[table[i - 1][0] as usize] ^ ANTILOG_TABLE[i - 1];
+        let coeff = EXP_TABLE[table[i - 1][0] as usize] ^ EXP_TABLE[i - 1];
         table[i][0] = LOG_TABLE[coeff as usize];
 
         i += 1;
@@ -172,7 +172,7 @@ const fn gen_polynomials() -> [[u8; 30]; 31] {
 const fn version_info() -> [usize; 41] {
     let mut array = [0; 41];
 
-    let mut version = 1;
+    let mut version = 7;
     while version <= 40 {
         let shifted_version = version << 12;
         let mut dividend: usize = shifted_version;

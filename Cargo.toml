@@ -10,7 +10,12 @@ exclude = [".gitignore", "benches/", "examples/"]
 
 [features]
 default = []
-wasm = ["dep:wasm-bindgen", "dep:wee_alloc", "dep:js-sys", "dep:console_error_panic_hook"]
+wasm = [
+  "dep:wasm-bindgen",
+  "dep:wee_alloc",
+  "dep:js-sys",
+  "dep:console_error_panic_hook",
+]
 text = []
 svg = []
 
