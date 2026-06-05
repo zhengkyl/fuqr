@@ -1,0 +1,15 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:wasm": "wasm-pack build rust/ --target nodejs --features wasm",
+    "test": "vitest run",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.52.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}

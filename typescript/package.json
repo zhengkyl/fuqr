@@ -1,0 +1,19 @@
+{
+  "name": "fuqr",
+  "version": "2.0.0",
+  "description": "A small and opinionated QR code generator that only supports 99% of usecases",
+  "license": "MIT",
+  "author": "Kyle Zheng <kylezheng73@gmail.com>",
+  "files": [
+    "dist/"
+  ],
+  "type": "module",
+  "main": "dist/qr.js",
+  "types": "dist/qr.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}
