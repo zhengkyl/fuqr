@@ -1,6 +1,6 @@
 import { MASK_FUNC, NUM_BLOCKS, NUM_CODEWORDS, NUM_EC_CODEWORDS } from "./constants.js";
 import { buildGeneratorMatrix, gf256MatrixInvert, gf256Mul } from "./ecc.js";
-import { bitIndexMatrix, generateCodewordMatrix, iterateMostlyDataModules } from "./matrix.js";
+import { bitIndexMatrix, iterateMostlyDataModules } from "./matrix.js";
 import type { Stencil } from "./stencil.js";
 import type { Ecl, Mask, Version } from "./types.js";
 
@@ -141,6 +141,7 @@ export class PixelArtFixer implements Fixer {
   //   caller already computed to build the QR matrix.
   // version, ecl: needed to look up block structure (NUM_BLOCKS, NUM_EC_CODEWORDS).
   stamp(
+    weightedStencil: Uint8Array,
     matrix: Uint8Array,
     mask: Mask,
     preByteArray: Uint8Array,
@@ -158,7 +159,6 @@ export class PixelArtFixer implements Fixer {
     const g1Blocks = blocks - (totalCodewords % blocks);
     const dataPerG1 = Math.floor(dataCodewords / blocks);
     const eccPerBlock = ecCodewords / blocks;
-    const center = (qrWidth - 1) / 2;
 
     const finalBitIndex = bitIndexMatrix(version, matrix);
 
@@ -173,9 +173,7 @@ export class PixelArtFixer implements Fixer {
     // Text codewords: first reqCw entries in interleaved order.
     // textCwsPerBlock[b] = their packed vals, in block-offset order.
     // packedToByteIdx: packed val → index into byteArray (to read encoded bytes).
-    const mPerBlock = new Map<number, number>(
-      Array.from({ length: blocks }, (_, index) => [index, 0]),
-    );
+    const mPerBlock = Array.from({ length: blocks }, (_, index) => 0);
     // const packedToByteIdx = new Map<number, number>();
     // Reconstruct interleaved-order packed vals for indices 0..reqCw-1
     // using the same block-distribution formula as the encoder.
@@ -183,7 +181,7 @@ export class PixelArtFixer implements Fixer {
     for (let c = 0; c < totalM; c++) {
       const block = (c % blocks) + (c < dataPerG1 * blocks ? 0 : g1Blocks);
       // const v = ((block << 8) | blockOff[block]++) + 1;
-      mPerBlock.set(block, mPerBlock.get(block)! + 1);
+      mPerBlock[block] += 1;
       // mPerBlock[block].push(v);
       // packedToByteIdx.set(v, c);
     }
@@ -202,80 +200,78 @@ export class PixelArtFixer implements Fixer {
     // overwrite top floor(r / 2) - 3
 
     const paddingPerBlock = Array.from({ length: blocks }, () => []);
-    const fixPerBlock = Array.from({ length: blocks }, () => []);
-    const breakPerBlock = Array.from({ length: blocks }, () => []);
+    const fixPerBlock: { preByteIdx: number; byte: number; weight: number }[][] = Array.from(
+      { length: blocks },
+      () => [],
+    );
+    const breakPerBlock: { postByteIdx: number; byte: number; weight: number }[][] = Array.from(
+      { length: blocks },
+      () => [],
+    );
 
-    const { data, width } = this.stencil;
-
-    function countOnes(num: number) {
-      let count = 0;
-      while (num > 0) {
-        if (num & 1) count++;
-        num >>= 1;
-      }
-      return count;
-    }
-
-    let targetByteBuffer = 0;
-    let targetSetBuffer = 0;
     let bitIdx = 0;
+    let targetBuffer = [0, 0, 0, 0, 0, 0, 0, 0];
+
+    const masker = MASK_FUNC[mask];
     iterateMostlyDataModules(qrWidth, (x, y) => {
       const posIdx = y * qrWidth + x;
       if (matrix[posIdx] !== 0) return;
+      let stencilVal = weightedStencil[posIdx];
+      if (stencilVal > 0) {
+        stencilVal ^= +masker(x, y);
+      }
+      // msb order
+      const msbBitPos = 7 - (bitIdx % 8);
+      targetBuffer[msbBitPos] = stencilVal;
 
-      targetByteBuffer <<= 1;
-      targetByteBuffer += data[posIdx] & 1;
+      const postByteIdx = bitIdx >> 3;
+      if (msbBitPos === 0) {
+        let fixable;
+        let block;
+        let preByteIdx!: number;
+        let actualByte;
 
-      targetSetBuffer <<= 1;
-      targetSetBuffer += data[posIdx] > 0 ? 1 : 0;
-
-      // byteArray[bitIdx >> 3] & ;
-      // ranked padding fixable
-      // ranked error fixable...
-
-      if (bitIdx % 8 === 7) {
-        const targetByte = targetByteBuffer & 0b1111_1111;
-        const targetSet = targetSetBuffer & 0b1111_1111;
-
-        const postByteIdx = bitIdx >> 3;
         if (postByteIdx < dataPerG1 * blocks) {
-          const block = postByteIdx % blocks;
+          block = postByteIdx % blocks;
           const symbol = Math.floor(postByteIdx / blocks);
 
-          const preByteIdx = block * dataPerG1 + Math.max(0, block - g1Blocks) + symbol;
-          const actualByte = preByteArray[preByteIdx];
+          preByteIdx = block * dataPerG1 + Math.max(0, block - g1Blocks) + symbol;
+          actualByte = preByteArray[preByteIdx];
 
-          const diff = (actualByte ^ targetByte) & targetSet;
-          const hamming = countOnes(diff);
-          if (preByteIdx < mPerBlock.get(block)!) {
-            breakPerBlock[block].push({ val: actualByte ^ diff, dist: hamming });
-          } else {
-            fixPerBlock[block].push({ val: actualByte ^ diff, dist: hamming });
-          }
+          fixable = preByteIdx >= mPerBlock[block];
         } else if (postByteIdx < dataCodewords) {
-          const block = (postByteIdx % blocks) + g1Blocks;
+          block = (postByteIdx % blocks) + g1Blocks;
           const symbol = dataPerG1;
 
-          const preByteIdx = block * dataPerG1 + (block - g1Blocks) + symbol;
-          const actualByte = preByteArray[preByteIdx];
+          preByteIdx = block * dataPerG1 + (block - g1Blocks) + symbol;
+          actualByte = preByteArray[preByteIdx];
 
-          const diff = (actualByte ^ targetByte) & targetSet;
-          const hamming = countOnes(diff);
-          if (preByteIdx < mPerBlock.get(block)!) {
-            breakPerBlock[block].push({ val: actualByte ^ diff, dist: hamming });
-          } else {
-            fixPerBlock[block].push({ val: actualByte ^ diff, dist: hamming });
-          }
+          fixable = preByteIdx >= mPerBlock[block];
         } else {
           const eccIdx = postByteIdx - dataCodewords;
-          const block = eccIdx % blocks;
-          const symbol = Math.floor(eccIdx / blocks);
+          block = eccIdx % blocks;
+          // const symbol = Math.floor(eccIdx / blocks);
+          actualByte = 0b1010_1010;
+          fixable = false;
+        }
 
-          const hamming = countOnes(targetSet) / 2;
+        let byte = actualByte;
+        let weight = 0;
+        for (let i = 0; i < 8; i++) {
+          const target = targetBuffer[i];
+          const targetWeight = target >> 1;
+          if (targetWeight === 0) continue;
+          const targetBit = target & 1;
+          const actualBit = (actualByte >> i) & 1;
+          if (targetBit === actualBit) continue;
+          weight += targetWeight;
+          byte ^= 1 << i;
+        }
 
-          // ecc is not known, so use *stable* arbitrary value + average hamming
-          const val = (0b1010_1010 & ~targetSet) | (targetByte & targetSet);
-          fixPerBlock[block].push({ val, dist: hamming });
+        if (fixable) {
+          fixPerBlock[block].push({ preByteIdx, byte, weight });
+        } else {
+          breakPerBlock[block].push({ postByteIdx, byte, weight });
         }
       }
 
@@ -284,54 +280,6 @@ export class PixelArtFixer implements Fixer {
 
     // visitAlignmentPatterns()
     // visitTimingPatterns
-
-    // traverseAlign
-    for (let y = 0; y < qrWidth; y++) {
-      for (let x = 0; x < qrWidth; x++) {
-        const idx = y * qrWidth + x;
-        if (data[idx] === 0) continue;
-
-        const bitIdx = finalBitIndex[idx];
-
-        if (bitIdx === 0 && !(x === qrWidth - 1 && y === qrWidth - 1)) {
-          // functional pattern
-        } else {
-          const byteIdx = bitIdx >> 3;
-          // if (num === 0 || seen.has(num)) continue;
-          // seen.add(num);
-          const block = (byteIdx % blocks) + (byteIdx < dataPerG1 * blocks ? 0 : g1Blocks);
-
-          const bitPos = 7 - (bitIdx % 8);
-        }
-
-        // const val = cwMatrix[y * qrWidth + x];
-        // if (val === 0 || seen.has(val)) continue;
-        // seen.add(val);
-        // coveredByBlock[(val - 1) >> 8].push({ val, dist: Math.hypot(x - center, y - center) });
-      }
-    }
-    for (const arr of coveredByBlock) arr.sort((a, b) => a.dist - b.dist);
-
-    // Pre-apply mask: maskedStencil[y*w+x] = desired stored bit at (x,y).
-    // stencil 1 (black) → 1 XOR masker; stencil 2 (white) → 0 XOR masker;
-    // stencil 0 (untouched) → 0.
-    const masker = MASK_FUNC[mask];
-    const maskedStencil = new Uint8Array(qrWidth * qrWidth);
-    for (let y = 0; y < qrWidth; y++) {
-      for (let x = 0; x < qrWidth; x++) {
-        const s = data[y * qrWidth + x];
-        if (s === 0) continue;
-        maskedStencil[y * qrWidth + x] = (s === 1 ? 1 : 0) ^ (masker(x, y) ? 1 : 0);
-      }
-    }
-
-    const getDesiredByte = (val: number): number => {
-      let byte = 0;
-      for (const [mx, my] of packedToModules.get(val)!) {
-        byte = (byte << 1) | maskedStencil[my * qrWidth + mx];
-      }
-      return byte;
-    };
 
     // const paddingPerBlock: Uint8Array[] = [];
     const broken: { index: number; value: number }[] = [];
