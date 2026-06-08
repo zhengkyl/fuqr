@@ -247,30 +247,28 @@ export class PixelArtFixer implements Fixer {
       const targetCols = new Uint8Array(k);
       const targetVals = new Uint8Array(k);
 
-      for (let i = 0; i < k; i++) {
+      for (let i = 0; i < m; i++) {
         targetCols[i] = i;
         targetVals[i] = blockVal[b][i];
       }
 
       const fixes = Math.min(p, fixOptions.length);
-      const dataSet = new Set<number>();
+      const taken = new Uint8Array(p);
       for (let i = 0; i < fixes; i++) {
         const { symbol, byte } = fixOptions[i];
         if (symbol < k) {
-          targetVals[symbol] = byte;
-          dataSet.add(symbol);
+          taken[symbol - m] = 1;
         }
+        targetCols[m + i] = symbol;
+        targetVals[m + i] = byte;
       }
-      let eccSlot = m;
-      for (let i = 0; i < fixes; i++) {
-        const { symbol, byte } = fixOptions[i];
-        if (symbol >= k) {
-          while (eccSlot < k && dataSet.has(eccSlot)) eccSlot++;
-          if (eccSlot >= k) break;
-          targetCols[eccSlot] = symbol;
-          targetVals[eccSlot] = byte;
-          eccSlot++;
-        }
+
+      let freePadding = 0;
+      for (let i = m + fixes; i < k; i++) {
+        while (taken[freePadding]) freePadding++;
+        targetCols[i] = m + freePadding;
+        targetVals[i] = blockVal[b][m + freePadding];
+        freePadding++;
       }
 
       const Msub: Uint8Array[] = Array.from({ length: k }, (_, j) => {
