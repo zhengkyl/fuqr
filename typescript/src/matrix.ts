@@ -85,6 +85,7 @@ export function buildMatrix(
 
   const interleaved = new Uint8Array(codewords + (remainderBits > 0 ? 1 : 0));
 
+  // one
   const numG1 = g1Blocks * dataPerG1Block;
   for (let i = 0; i < numG1; i++) {
     interleaved[(i % dataPerG1Block) * blocks + Math.floor(i / dataPerG1Block)] = byteArray[i];
@@ -95,6 +96,17 @@ export function buildMatrix(
     const row = Math.floor(i / dataPerG2Block);
     interleaved[col * blocks + row + (col === dataPerG2Block - 1 ? 0 : g1Blocks)] =
       byteArray[i + numG1];
+  }
+
+  // two
+  for (let i = 0; i < dataCodewords; i++) {
+    const col = Math.floor(i / blocks);
+    const row = i % blocks;
+    if (col < dataPerG1Block) {
+      interleaved[i] = byteArray[row * dataPerG1Block + col + Math.max(0, row - g1Blocks)];
+    } else {
+      interleaved[i] = byteArray[numG1 + row * dataPerG2Block + col];
+    }
   }
 
   const divisor = generatorPolynomial(eccPerBlock);

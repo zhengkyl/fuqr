@@ -1,7 +1,6 @@
 import { MASK_FUNC, NUM_BLOCKS, NUM_CODEWORDS, NUM_EC_CODEWORDS } from "./constants.js";
 import { buildGeneratorMatrix, gf256MatrixInvert, gf256Mul } from "./ecc.js";
-import { bitIndexMatrix, iterateMostlyDataModules } from "./matrix.js";
-import type { Stencil } from "./stencil.js";
+import { iterateMostlyDataModules } from "./matrix.js";
 import type { Ecl, Mask, Version } from "./types.js";
 
 export interface Fixer {
@@ -78,45 +77,9 @@ export interface Fixer {
 // }
 
 export class PixelArtFixer implements Fixer {
-  stencil: Stencil;
-
-  constructor(stencil: Stencil) {
-    this.stencil = stencil;
-  }
+  constructor() {}
 
   fits(version: Version, ecl: Ecl, reqCw: number): boolean {
-    const totalCodewords = NUM_CODEWORDS[version];
-    const ecCodewords = NUM_EC_CODEWORDS[version][ecl];
-    const dataCodewords = totalCodewords - ecCodewords;
-    const blocks = NUM_BLOCKS[version][ecl];
-    const g1Blocks = blocks - (totalCodewords % blocks);
-    const dataPerG1 = Math.floor(dataCodewords / blocks);
-    const qrWidth = version * 4 + 17;
-
-    const { matrix, threshold } = generateCodewordMatrix(version, ecl);
-    const coveredPerBlock = new Uint16Array(blocks);
-    const { data } = this.stencil;
-    const seen = new Set<number>();
-    for (let y = 0; y < qrWidth; y++) {
-      for (let x = 0; x < qrWidth; x++) {
-        if (data[y * qrWidth + x] === 0) continue;
-        const val = matrix[y * qrWidth + x];
-        if (val === 0 || seen.has(val)) continue;
-        seen.add(val);
-        coveredPerBlock[(val - 1) >> 8]++;
-      }
-    }
-
-    // Distribute reqCw text codewords across blocks to find T per block.
-    const textCwPerBlock = new Uint16Array(blocks);
-    for (let c = 0; c < reqCw; c++) {
-      const block = c < dataPerG1 * blocks ? c % blocks : g1Blocks + (c - dataPerG1 * blocks);
-      textCwPerBlock[block]++;
-    }
-    for (let b = 0; b < blocks; b++) {
-      const dataPerBlock = b < g1Blocks ? dataPerG1 : dataPerG1 + 1;
-      if (coveredPerBlock[b] > dataPerBlock - textCwPerBlock[b] + threshold - 3) return false;
-    }
     return true;
   }
 
@@ -127,30 +90,18 @@ export class PixelArtFixer implements Fixer {
     throw new Error("Method not implemented.");
   }
 
-  // byteArray: the full data codeword array already encoded by the caller
-  //   (text + terminator + byte-align filled; padding positions still 0).
-  // reqCw: number of codewords occupied by text+terminator (boundary between
-  //   mandatory text bytes and free padding slots).
-  // cwMatrix, threshold: from generateCodewordMatrix(version, ecl) — the same
-  //   call the caller already made to build the QR matrix.
-  // byteArray: data codewords already encoded by the caller (text+terminator
-  //   filled; padding positions still 0). stamp() writes its solved padding
-  //   values directly into this array.
-  // reqCw: codewords occupied by text+terminator — boundary before free slots.
-  // cwMatrix, threshold: from generateCodewordMatrix(version, ecl), which the
-  //   caller already computed to build the QR matrix.
-  // version, ecl: needed to look up block structure (NUM_BLOCKS, NUM_EC_CODEWORDS).
   stamp(
     weightedStencil: Uint8Array,
     matrix: Uint8Array,
     mask: Mask,
     preByteArray: Uint8Array,
+    m: number,
     totalM: number,
     // cwMatrix: Uint16Array,
     // threshold: number,
     version: Version,
     ecl: Ecl,
-  ): { paddingPerBlock: Uint8Array[]; broken: { index: number; value: number }[] } {
+  ) {
     const qrWidth = version * 4 + 17;
     const totalCodewords = NUM_CODEWORDS[version];
     const ecCodewords = NUM_EC_CODEWORDS[version][ecl];
@@ -160,54 +111,34 @@ export class PixelArtFixer implements Fixer {
     const dataPerG1 = Math.floor(dataCodewords / blocks);
     const eccPerBlock = ecCodewords / blocks;
 
-    const finalBitIndex = bitIndexMatrix(version, matrix);
+    const fixPerBlock: { symbol: number; byte: number; weight: number }[][] = Array.from(
+      { length: blocks },
+      () => [],
+    );
+    const breakPerBlock: { symbol: number; byte: number; weight: number }[][] = Array.from(
+      { length: blocks },
+      () => [],
+    );
 
-    // const numToBlock = (c: number) => {
-    //   return (c % blocks) + (c < dataPerG1 * blocks ? 0 : g1Blocks);
-    // };
-
-    // Single traversal in bit order (zigzag, MSB-first per codeword) builds:
-    //   packedToModules: packed val → 8 module (x,y) positions in MSB-first order
-    //   packedToInterleavedIdx: packed val → interleaved codeword index
-
-    // Text codewords: first reqCw entries in interleaved order.
-    // textCwsPerBlock[b] = their packed vals, in block-offset order.
-    // packedToByteIdx: packed val → index into byteArray (to read encoded bytes).
-    const mPerBlock = Array.from({ length: blocks }, (_, index) => 0);
-    // const packedToByteIdx = new Map<number, number>();
-    // Reconstruct interleaved-order packed vals for indices 0..reqCw-1
-    // using the same block-distribution formula as the encoder.
-    // const blockOff = new Uint8Array(blocks);
-    for (let c = 0; c < totalM; c++) {
-      const block = (c % blocks) + (c < dataPerG1 * blocks ? 0 : g1Blocks);
-      // const v = ((block << 8) | blockOff[block]++) + 1;
-      mPerBlock[block] += 1;
-      // mPerBlock[block].push(v);
-      // packedToByteIdx.set(v, c);
+    const mPerBlock = Array.from({ length: blocks }, () => 0);
+    const pPerBlock = Array.from({ length: blocks }, () => 0);
+    let remainingM = m;
+    for (let b = 0; b < blocks; b++) {
+      const capacity = b < g1Blocks ? dataPerG1 : dataPerG1 + 1;
+      const filled = Math.min(capacity, remainingM);
+      remainingM -= filled;
+      mPerBlock[b] = filled;
+      pPerBlock[b] = capacity - filled;
     }
-    // const textValSet = new Set<number>(packedToByteIdx.keys());
 
-    // Collect covered codewords per block with distance to QR center.
-    const coveredByBlock: { val: number; dist: number }[][] = Array.from(
+    const blockVal = Array.from(
       { length: blocks },
-      () => [],
+      (_, index) =>
+        new Uint8Array(index < g1Blocks ? dataPerG1 + eccPerBlock : dataPerG1 + eccPerBlock + 1),
     );
 
-    // per block
-    // find a differing symbols
-    // rank by hamming dist (does mask affect this?)
-    // change top p
-    // overwrite top floor(r / 2) - 3
-
-    const paddingPerBlock = Array.from({ length: blocks }, () => []);
-    const fixPerBlock: { preByteIdx: number; byte: number; weight: number }[][] = Array.from(
-      { length: blocks },
-      () => [],
-    );
-    const breakPerBlock: { postByteIdx: number; byte: number; weight: number }[][] = Array.from(
-      { length: blocks },
-      () => [],
-    );
+    // visitAlignmentPatterns()
+    // visitTimingPatterns
 
     let bitIdx = 0;
     let targetBuffer = [0, 0, 0, 0, 0, 0, 0, 0];
@@ -216,6 +147,7 @@ export class PixelArtFixer implements Fixer {
     iterateMostlyDataModules(qrWidth, (x, y) => {
       const posIdx = y * qrWidth + x;
       if (matrix[posIdx] !== 0) return;
+
       let stencilVal = weightedStencil[posIdx];
       if (stencilVal > 0) {
         stencilVal ^= +masker(x, y);
@@ -226,34 +158,32 @@ export class PixelArtFixer implements Fixer {
 
       const postByteIdx = bitIdx >> 3;
       if (msbBitPos === 0) {
-        let fixable;
         let block;
-        let preByteIdx!: number;
+        let symbol;
+        let preByteIdx;
         let actualByte;
 
         if (postByteIdx < dataPerG1 * blocks) {
           block = postByteIdx % blocks;
-          const symbol = Math.floor(postByteIdx / blocks);
+          symbol = Math.floor(postByteIdx / blocks);
 
           preByteIdx = block * dataPerG1 + Math.max(0, block - g1Blocks) + symbol;
           actualByte = preByteArray[preByteIdx];
-
-          fixable = preByteIdx >= mPerBlock[block];
         } else if (postByteIdx < dataCodewords) {
           block = (postByteIdx % blocks) + g1Blocks;
-          const symbol = dataPerG1;
+          symbol = dataPerG1;
 
           preByteIdx = block * dataPerG1 + (block - g1Blocks) + symbol;
           actualByte = preByteArray[preByteIdx];
-
-          fixable = preByteIdx >= mPerBlock[block];
         } else {
           const eccIdx = postByteIdx - dataCodewords;
           block = eccIdx % blocks;
-          // const symbol = Math.floor(eccIdx / blocks);
+          symbol = Math.floor(eccIdx / blocks) + (block < g1Blocks ? dataPerG1 : dataPerG1 + 1);
           actualByte = 0b1010_1010;
-          fixable = false;
         }
+
+        // TODO don't need ecc values
+        blockVal[block][symbol] = actualByte;
 
         let byte = actualByte;
         let weight = 0;
@@ -268,65 +198,81 @@ export class PixelArtFixer implements Fixer {
           byte ^= 1 << i;
         }
 
+        const fixable = preByteIdx == null || symbol >= mPerBlock[block];
+
         if (fixable) {
-          fixPerBlock[block].push({ preByteIdx, byte, weight });
+          fixPerBlock[block].push({ symbol, byte, weight });
         } else {
-          breakPerBlock[block].push({ postByteIdx, byte, weight });
+          breakPerBlock[block].push({ symbol, byte, weight });
         }
       }
 
       bitIdx++;
     });
 
-    // visitAlignmentPatterns()
-    // visitTimingPatterns
+    const breakLimit = Math.floor(eccPerBlock / 2) - 3;
+    for (let i = 0; i < blocks; i++) {
+      const fixable = pPerBlock[i];
+      const fixOptions = fixPerBlock[i];
+      const breakOptions = breakPerBlock[i];
 
-    // const paddingPerBlock: Uint8Array[] = [];
+      if (fixOptions.length > fixable) {
+        fixOptions.sort((a, b) => b.weight - a.weight);
+        fixPerBlock[i] = fixOptions.slice(0, fixable);
+        breakOptions.push(...fixOptions.slice(fixable));
+      }
+
+      if (breakOptions.length > breakLimit) {
+        breakOptions.sort((a, b) => b.weight - a.weight);
+      }
+    }
+
     const broken: { index: number; value: number }[] = [];
-    const brokenBudget = threshold - 3;
+    const brokenBudget = Math.floor(eccPerBlock / 2) - 3;
 
+    let G = buildGeneratorMatrix(dataPerG1, eccPerBlock);
     for (let b = 0; b < blocks; b++) {
+      if (b === g1Blocks) {
+        G = buildGeneratorMatrix(dataPerG1 + 1, eccPerBlock);
+      }
+
       const k = b < g1Blocks ? dataPerG1 : dataPerG1 + 1;
-      const T = mPerBlock[b].length;
-      const allCov = coveredByBlock[b];
 
-      const kNonTextSet = new Set<number>();
-      for (const { val } of allCov) {
-        if (kNonTextSet.size >= k - T) break;
-        if (!textValSet.has(val)) kNonTextSet.add(val);
-      }
+      const p = pPerBlock[b];
+      if (p === 0) continue;
+      const fixOptions = fixPerBlock[b];
+      if (fixOptions.length === 0) continue;
+      const m = mPerBlock[b];
 
-      const brokenVals: number[] = [];
-      for (const { val } of allCov) {
-        if (brokenVals.length >= brokenBudget) break;
-        if (!textValSet.has(val) && kNonTextSet.has(val)) continue;
-        brokenVals.push(val);
-      }
-
-      // Solve: data = Msub⁻¹ × targetVals where Msub[j][i] = G[i][targetCols[j]].
       const targetCols = new Uint8Array(k);
       const targetVals = new Uint8Array(k);
-      for (let i = 0; i < T; i++) {
-        const v = mPerBlock[b][i];
-        targetCols[i] = (v - 1) & 0xff;
-        targetVals[i] = preByteArray[packedToByteIdx.get(v)!];
+
+      for (let i = 0; i < k; i++) {
+        targetCols[i] = i;
+        targetVals[i] = blockVal[b][i];
       }
-      let filled = T;
-      for (const val of kNonTextSet) {
-        targetCols[filled] = (val - 1) & 0xff;
-        targetVals[filled++] = getDesiredByte(val);
+
+      const fixes = Math.min(p, fixOptions.length);
+      const dataSet = new Set<number>();
+      for (let i = 0; i < fixes; i++) {
+        const { symbol, byte } = fixOptions[i];
+        if (symbol < k) {
+          targetVals[symbol] = byte;
+          dataSet.add(symbol);
+        }
       }
-      if (filled < k) {
-        const usedCols = new Set<number>(targetCols.subarray(0, filled));
-        for (let col = T; col < k && filled < k; col++) {
-          if (!usedCols.has(col)) {
-            targetCols[filled] = col;
-            targetVals[filled++] = 0;
-          }
+      let eccSlot = m;
+      for (let i = 0; i < fixes; i++) {
+        const { symbol, byte } = fixOptions[i];
+        if (symbol >= k) {
+          while (eccSlot < k && dataSet.has(eccSlot)) eccSlot++;
+          if (eccSlot >= k) break;
+          targetCols[eccSlot] = symbol;
+          targetVals[eccSlot] = byte;
+          eccSlot++;
         }
       }
 
-      const G = buildGeneratorMatrix(k, eccPerBlock);
       const Msub: Uint8Array[] = Array.from({ length: k }, (_, j) => {
         const row = new Uint8Array(k);
         for (let i = 0; i < k; i++) row[i] = G[i][targetCols[j]];
@@ -337,15 +283,6 @@ export class PixelArtFixer implements Fixer {
       for (let i = 0; i < k; i++) {
         for (let j = 0; j < k; j++) solvedData[i] ^= gf256Mul(Minv[i][j], targetVals[j]);
       }
-
-      // solvedData[T..k-1] = solved padding values for the caller to inject.
-      // paddingPerBlock.push(solvedData.slice(T));
-
-      for (const val of brokenVals) {
-        broken.push({ index: packedToInterleavedIdx.get(val)!, value: getDesiredByte(val) });
-      }
     }
-
-    // return { paddingPerBlock, broken };
   }
 }

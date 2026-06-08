@@ -9,11 +9,7 @@ export { AlphanumericEncoder, ByteEncoder, NumericEncoder } from "./encoder.js";
 export type { Encoder } from "./encoder.js";
 export { LogoFixer as ExactLogoStamper, PixelArtFixer as PixelArtStamper } from "./fixer.js";
 export type { Fixer as Stamper } from "./fixer.js";
-export {
-  buildMatrix,
-  generateCodewordMatrix,
-  iterateMostlyDataModules as traverseDataBits,
-} from "./matrix.js";
+export { buildMatrix, iterateMostlyDataModules as traverseDataBits } from "./matrix.js";
 export { imageToLogo, resizeStencil } from "./stencil.js";
 export type { Logo, Stencil } from "./stencil.js";
 export { MAX_VERSION, Module, QrError } from "./types.js";
