@@ -14,7 +14,5 @@
   "include": [
     "tests/**/*.ts",
     "typescript/**/*.ts",
-    "gitignore/qr.ts",
-    "gitignore/full.ts",
   ]
 }

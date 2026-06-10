@@ -3,9 +3,9 @@ import {
   FORMAT_INFO,
   MASK_FUNC,
   NUM_BLOCKS,
-  NUM_CODEWORDS,
+  NUM_BYTES,
   NUM_DATA_MODULES,
-  NUM_EC_CODEWORDS,
+  NUM_EC_BYTES,
   VERSION_INFO,
 } from "./constants.js";
 import { generatorPolynomial, remainder } from "./ecc.js";
@@ -20,13 +20,13 @@ export function buildMatrix(
   ecl: Ecl,
   mask: Mask = 2,
 ): { matrix: Uint8Array; version: Version; ecl: Ecl; mask: Mask } {
-  const modules = NUM_DATA_MODULES[version];
-  const codewords = Math.floor(modules / 8);
-  const remainderBits = modules % 8;
-  const ecCodewords = NUM_EC_CODEWORDS[version][ecl];
-  const dataCodewords = codewords - ecCodewords;
+  const numModules = NUM_DATA_MODULES[version];
+  const numBytes = Math.floor(numModules / 8);
+  const remainderBits = numModules % 8;
+  const numEcBytes = NUM_EC_BYTES[version][ecl];
+  const numMessageBytes = numBytes - numEcBytes;
 
-  const byteArray = new Uint8Array(dataCodewords);
+  const messageBytes = new Uint8Array(numMessageBytes);
   let buf = 0,
     bufLen = 0,
     bytePos = 0;
@@ -35,23 +35,22 @@ export function buildMatrix(
     bufLen += n;
     while (bufLen >= 8) {
       bufLen -= 8;
-      byteArray[bytePos++] = (buf >> bufLen) & 0xff;
+      messageBytes[bytePos++] = (buf >> bufLen) & 0xff;
     }
   };
 
   encoder.encode(version, push);
 
-  const remainingDataBits = dataCodewords * 8 - bytePos * 8 - bufLen;
+  const remainingDataBits = numMessageBytes * 8 - bytePos * 8 - bufLen;
   push(0, remainingDataBits < 4 ? remainingDataBits : 4);
   push(0, (8 - bufLen) & 7);
 
+  const c = bytePos;
   let alternating = 0b1110_1100;
-  for (let i = bytePos; i < dataCodewords; i++) {
+  for (let i = bytePos; i < numMessageBytes; i++) {
     push(alternating, 8);
     alternating ^= 0b1111_1101;
   }
-
-  const stencil = new Uint8Array();
 
   const width = version * 4 + 17;
   const matrix = new Uint8Array(width * width);
@@ -62,75 +61,45 @@ export function buildMatrix(
   visitAlignmentPatterns(version, width, set);
   visitVersionInfo(version, width, set);
 
-  const symbolNum = bitIndexMatrix(version, matrix);
-  // const numToBlock = () => {
-
-  // }
-
-  // TODO
-  fixer.fixPadding();
+  fixer.fixMatrix(matrix, version);
+  fixer.fixMessage(messageBytes, c, matrix, version, ecl, mask);
 
   const blocks = NUM_BLOCKS[version][ecl];
-  const g2Blocks = codewords % blocks;
+  const g2Blocks = numBytes % blocks;
   const g1Blocks = blocks - g2Blocks;
-  const dataPerG1Block = Math.floor(dataCodewords / blocks);
-  const dataPerG2Block = dataPerG1Block + 1;
-  const eccPerBlock = ecCodewords / blocks;
+  const messagePerG1 = Math.floor(numMessageBytes / blocks);
+  const messagePerG2 = messagePerG1 + 1;
+  const ecPerBlock = numEcBytes / blocks;
 
-  const numToBlock = (c: number) => {
-    return (c % blocks) + (c < dataPerG1Block * blocks ? 0 : g1Blocks);
-  };
+  const interleaved = new Uint8Array(numBytes + (remainderBits > 0 ? 1 : 0));
 
-  // for (let y = 0; y < stencil)
-
-  const interleaved = new Uint8Array(codewords + (remainderBits > 0 ? 1 : 0));
-
-  // one
-  const numG1 = g1Blocks * dataPerG1Block;
-  for (let i = 0; i < numG1; i++) {
-    interleaved[(i % dataPerG1Block) * blocks + Math.floor(i / dataPerG1Block)] = byteArray[i];
-  }
-  const numG2 = g2Blocks * dataPerG2Block;
-  for (let i = 0; i < numG2; i++) {
-    const col = i % dataPerG2Block;
-    const row = Math.floor(i / dataPerG2Block);
-    interleaved[col * blocks + row + (col === dataPerG2Block - 1 ? 0 : g1Blocks)] =
-      byteArray[i + numG1];
-  }
-
-  // two
-  for (let i = 0; i < dataCodewords; i++) {
+  const numG1 = g1Blocks * messagePerG1;
+  for (let i = 0; i < numMessageBytes; i++) {
     const col = Math.floor(i / blocks);
     const row = i % blocks;
-    if (col < dataPerG1Block) {
-      interleaved[i] = byteArray[row * dataPerG1Block + col + Math.max(0, row - g1Blocks)];
+    if (col < messagePerG1) {
+      interleaved[i] = messageBytes[row * messagePerG1 + col + Math.max(0, row - g1Blocks)];
     } else {
-      interleaved[i] = byteArray[numG1 + row * dataPerG2Block + col];
+      interleaved[i] = messageBytes[numG1 + row * messagePerG2 + col];
     }
   }
 
-  const divisor = generatorPolynomial(eccPerBlock);
+  const divisor = generatorPolynomial(ecPerBlock);
   for (let i = 0; i < g1Blocks; i++) {
-    const ec = remainder(byteArray.subarray(i * dataPerG1Block, (i + 1) * dataPerG1Block), divisor);
-    for (let j = 0; j < eccPerBlock; j++) interleaved[dataCodewords + j * blocks + i] = ec[j];
+    const ec = remainder(messageBytes.subarray(i * messagePerG1, (i + 1) * messagePerG1), divisor);
+    for (let j = 0; j < ecPerBlock; j++) interleaved[numMessageBytes + j * blocks + i] = ec[j];
   }
   const g2Start = numG1;
   for (let i = 0; i < g2Blocks; i++) {
     const ec = remainder(
-      byteArray.subarray(g2Start + i * dataPerG2Block, g2Start + (i + 1) * dataPerG2Block),
+      messageBytes.subarray(g2Start + i * messagePerG2, g2Start + (i + 1) * messagePerG2),
       divisor,
     );
-    for (let j = 0; j < eccPerBlock; j++)
-      interleaved[dataCodewords + j * blocks + i + g1Blocks] = ec[j];
+    for (let j = 0; j < ecPerBlock; j++)
+      interleaved[numMessageBytes + j * blocks + i + g1Blocks] = ec[j];
   }
 
-  // TODO
-  fixer.fixInterleaved();
-
-  // const width = version * 4 + 17;
-  // const matrix = new Uint8Array(width * width);
-  // const set = (x: number, y: number, value: number) => (matrix[y * width + x] |= value);
-  // _buildFunctionPatternMatrix(version, ecl, mask, set);
+  fixer.fixInterleaved(interleaved);
 
   let bitIdx = 0;
   const masker = MASK_FUNC[mask];
@@ -145,59 +114,10 @@ export function buildMatrix(
   return { matrix, version, ecl, mask };
 }
 
-// Returns a Uint16Array where each data module stores (block << 8 | offset) + 1.
-// 0 = non-data / remainder bit.
-// Also returns the per-block error correction threshold (max correctable errors).
-// export function generateCodewordMatrix(
-//   version: Version,
-//   ecl: Ecl,
-// ): { matrix: Uint16Array; threshold: number } {
-//   const totalCodewords = NUM_CODEWORDS[version];
-//   const ecCodewords = NUM_EC_CODEWORDS[version][ecl];
-//   const dataCodewords = totalCodewords - ecCodewords;
-//   const blocks = NUM_BLOCKS[version][ecl];
-//   const g1Blocks = blocks - (totalCodewords % blocks);
-//   const dataPerG1 = Math.floor(dataCodewords / blocks);
-//   const eccPerBlock = ecCodewords / blocks;
-
-//   const blockOffset = new Uint8Array(blocks);
-//   const cwToPackedU16 = new Uint16Array(totalCodewords);
-//   for (let c = 0; c < dataCodewords; c++) {
-//     const block = c < dataPerG1 * blocks ? c % blocks : g1Blocks + (c - dataPerG1 * blocks);
-//     cwToPackedU16[c] = ((block << 8) | blockOffset[block]++) + 1;
-//   }
-//   for (let c = dataCodewords; c < totalCodewords; c++) {
-//     const block = (c - dataCodewords) % blocks;
-//     cwToPackedU16[c] = ((block << 8) | blockOffset[block]++) + 1;
-//   }
-
-//   const width = version * 4 + 17;
-//   const matrix = new Uint16Array(width * width);
-//   const markReserved = (x: number, y: number, _v: number) => {
-//     matrix[y * width + x] = 0xffff;
-//   };
-//   traverseFinderPatterns(width, markReserved);
-//   traverseAlignmentPatterns(version, width, markReserved);
-//   traverseTimingPatterns(width, markReserved);
-//   traverseVersionInfo(version, width, markReserved);
-//   traverseFormatInfo(width, 0, 0, markReserved);
-
-//   let bitIdx = 0;
-//   traverseDataBits(width, (x, y) => {
-//     if (matrix[y * width + x] > 0) return;
-//     if (bitIdx < totalCodewords * 8) matrix[y * width + x] = cwToPackedU16[bitIdx >> 3];
-//     bitIdx++;
-//   });
-
-//   for (let i = 0; i < matrix.length; i++) if (matrix[i] === 0xffff) matrix[i] = 0;
-
-//   return { matrix, threshold: eccPerBlock >> 1 };
-// }
-
 // 0 is function OR first bit
 export function bitIndexMatrix(version: number, templateMatrix: Uint8Array) {
   const symbolNumMatrix = new Uint16Array(templateMatrix.length);
-  const totalCodewords = NUM_CODEWORDS[version];
+  const totalCodewords = NUM_BYTES[version];
   const width = version * 4 + 17;
   let bitIndex = 0;
   iterateMostlyDataModules(width, (x, y) => {
@@ -210,10 +130,7 @@ export function bitIndexMatrix(version: number, templateMatrix: Uint8Array) {
   return symbolNumMatrix;
 }
 
-export function iterateMostlyDataModules(
-  width: number,
-  callback: (x: number, y: number) => void,
-): void {
+export function iterateMostlyDataModules(width: number, callback: (x: number, y: number) => void) {
   let y = width - 1;
   let dy = -1;
   let rowEnd = 9;
@@ -248,7 +165,7 @@ export function iterateMostlyDataModules(
 export function visitFinderPatterns(
   width: number,
   set: (x: number, y: number, value: number) => void,
-): void {
+) {
   const setFinder = (x: number, y: number) => {
     for (let dy = -3; dy <= 3; dy++) {
       for (let dx = -3; dx <= 3; dx++) {
@@ -274,7 +191,7 @@ export function visitAlignmentPatterns(
   version: number,
   width: number,
   set: (x: number, y: number, value: number) => void,
-): void {
+) {
   if (version < 2) return;
   const setAlignment = (cx: number, cy: number) => {
     for (let dy = -2; dy <= 2; dy++) {
@@ -311,7 +228,7 @@ export function visitAlignmentPatterns(
 export function visitTimingPatterns(
   width: number,
   set: (x: number, y: number, value: number) => void,
-): void {
+) {
   for (let i = 8; i < width - 8; i++) {
     const module = Module.TIMING | ((i & 1) ^ Module.ON);
     set(6, i, module);
@@ -323,9 +240,9 @@ export function visitVersionInfo(
   version: number,
   width: number,
   set: (x: number, y: number, value: number) => void,
-): void {
+) {
   if (version < 7) return;
-  const versionInfo = VERSION_INFO[version];
+  const versionInfo = VERSION_INFO[version - 7];
   for (let i = 0; i < 6; i++) {
     for (let j = 0; j < 3; j++) {
       const bit = (versionInfo >> (i * 3 + j)) & Module.ON;
@@ -340,7 +257,7 @@ export function visitFormatInfo(
   mask: Mask,
   width: number,
   set: (x: number, y: number, value: number) => void,
-): void {
+) {
   const formatInfo = FORMAT_INFO[ecl][mask];
   for (let i = 0; i < 6; i++) set(8, i, Module.FORMAT | ((formatInfo >> i) & Module.ON));
   set(8, 7, Module.FORMAT | ((formatInfo >> 6) & Module.ON));

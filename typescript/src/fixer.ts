@@ -1,12 +1,53 @@
-import { MASK_FUNC, NUM_BLOCKS, NUM_CODEWORDS, NUM_EC_CODEWORDS } from "./constants.js";
+import { MASK_FUNC, NUM_BLOCKS, NUM_BYTES, NUM_EC_BYTES } from "./constants.js";
 import { buildGeneratorMatrix, gf256MatrixInvert, gf256Mul } from "./ecc.js";
-import { iterateMostlyDataModules } from "./matrix.js";
-import type { Ecl, Mask, Version } from "./types.js";
+import type { Encoder } from "./encoder.js";
+import { iterateMostlyDataModules, visitAlignmentPatterns, visitTimingPatterns } from "./matrix.js";
+import { Module, type Ecl, type Mask, type Version } from "./types.js";
+
+// Consistent variable names
+//
+// A group of eight QR data modules is a byte/symbol/codeword. Prefer "byte".
+// Message and error correction bytes make up a block/codeword. Prefer "block".
+// Error correction can be shortened to "ec".
+//
+// Data refers to the collective blocks which make up the entire QR data section.
+// |--------------------- data ----------------------|
+// |---------------- block ----------------| ...etc
+// |---------- message ----------|-- ec --|
+// |--- content ---|-- padding --|
+//
+// Content consists of one or more sections with a header and binary data.
+// The last content section in a message ends with a terminator, space permitting.
 
 export interface Fixer {
-  fits(version: Version, ecl: Ecl, reqCw: number): boolean;
-  fixPadding(): void;
-  fixInterleaved(): void;
+  // Called once content fits at (version, ecl). May raise version/ecl as needed.
+  fixVersionEcl(version: Version, ecl: Ecl, encoder: Encoder): { version: Version; ecl: Ecl };
+  // Mutates the function pattern template matrix before data placement.
+  fixMatrix(matrix: Uint8Array, version: Version): void;
+  // Mutates messageBytes, preserving the first c content bytes.
+  // Stores any deliberately broken bytes for fixInterleaved.
+  fixMessage(
+    messageBytes: Uint8Array,
+    c: number,
+    matrix: Uint8Array,
+    version: Version,
+    ecl: Ecl,
+    mask: Mask,
+  ): void;
+  // Mutates the final interleaved bytes, applying breaks within the ec budget.
+  fixInterleaved(interleaved: Uint8Array): void;
+}
+
+// Forced bits of the interleaved byte at index.
+type Break = { index: number; mask: number; value: number };
+
+export class NoopFixer implements Fixer {
+  fixVersionEcl(version: Version, ecl: Ecl) {
+    return { version, ecl };
+  }
+  fixMatrix() {}
+  fixMessage() {}
+  fixInterleaved() {}
 }
 
 // export class LogoFixer implements Fixer {
@@ -68,84 +109,84 @@ export interface Fixer {
 //     }
 //     return true;
 //   }
-//   fixPadding(): void {
-//     throw new Error("Method not implemented.");
-//   }
-//   fixInterleaved(): void {
-//     throw new Error("Method not implemented.");
-//   }
 // }
 
+// Each weightedStencil value is (weight << 1) | bit, indexed by module position.
+// Weight 0 means don't care. Data module bits are pre-mask, function module bits are final.
 export class PixelArtFixer implements Fixer {
-  constructor() {}
+  weightedStencil: Uint8Array;
+  breaks: Break[] = [];
 
-  fits(version: Version, ecl: Ecl, reqCw: number): boolean {
-    return true;
+  constructor(weightedStencil: Uint8Array) {
+    this.weightedStencil = weightedStencil;
   }
 
-  fixPadding(): void {
-    throw new Error("Method not implemented.");
-  }
-  fixInterleaved(): void {
-    throw new Error("Method not implemented.");
+  fixVersionEcl(version: Version, ecl: Ecl) {
+    return { version, ecl };
   }
 
-  stamp(
-    weightedStencil: Uint8Array,
+  // draw over timing and all alignment patterns except the only used (bottom right)
+  fixMatrix(matrix: Uint8Array, version: Version) {
+    const weightedStencil = this.weightedStencil;
+    const width = version * 4 + 17;
+    const override = (x: number, y: number) => {
+      const posIdx = y * width + x;
+      const stencilVal = weightedStencil[posIdx];
+      if (stencilVal >> 1 === 0) return;
+      matrix[posIdx] = (matrix[posIdx] & ~Module.ON) | (stencilVal & Module.ON);
+    };
+    visitTimingPatterns(width, override);
+
+    const sparedStart = width - 9;
+    visitAlignmentPatterns(version, width, (x: number, y: number) => {
+      if (x >= sparedStart && y >= sparedStart) return;
+      override(x, y);
+    });
+  }
+
+  fixMessage(
+    messageBytes: Uint8Array,
+    contentBytes: number,
     matrix: Uint8Array,
-    mask: Mask,
-    preByteArray: Uint8Array,
-    m: number,
-    totalM: number,
-    // cwMatrix: Uint16Array,
-    // threshold: number,
     version: Version,
     ecl: Ecl,
+    mask: Mask,
   ) {
-    const qrWidth = version * 4 + 17;
-    const totalCodewords = NUM_CODEWORDS[version];
-    const ecCodewords = NUM_EC_CODEWORDS[version][ecl];
-    const dataCodewords = totalCodewords - ecCodewords;
-    const blocks = NUM_BLOCKS[version][ecl];
-    const g1Blocks = blocks - (totalCodewords % blocks);
-    const dataPerG1 = Math.floor(dataCodewords / blocks);
-    const eccPerBlock = ecCodewords / blocks;
+    const numBytes = NUM_BYTES[version];
+    const numEcBytes = NUM_EC_BYTES[version][ecl];
+    const numMessageBytes = numBytes - numEcBytes;
+    const numBlocks = NUM_BLOCKS[version][ecl];
+    const numG1Blocks = numBlocks - (numBytes % numBlocks);
+    const messagePerG1 = Math.floor(numMessageBytes / numBlocks);
+    const ecPerBlock = numEcBytes / numBlocks;
 
-    const fixPerBlock: { symbol: number; byte: number; weight: number }[][] = Array.from(
-      { length: blocks },
-      () => [],
-    );
-    const breakPerBlock: { symbol: number; byte: number; weight: number }[][] = Array.from(
-      { length: blocks },
-      () => [],
-    );
+    const blockStart = (b: number) => b * messagePerG1 + Math.max(0, b - numG1Blocks);
 
-    const mPerBlock = Array.from({ length: blocks }, () => 0);
-    const pPerBlock = Array.from({ length: blocks }, () => 0);
-    let remainingM = m;
-    for (let b = 0; b < blocks; b++) {
-      const capacity = b < g1Blocks ? dataPerG1 : dataPerG1 + 1;
-      const filled = Math.min(capacity, remainingM);
-      remainingM -= filled;
-      mPerBlock[b] = filled;
+    const cPerBlock = Array.from({ length: numBlocks }, () => 0);
+    const pPerBlock = Array.from({ length: numBlocks }, () => 0);
+    let remainingC = contentBytes;
+    for (let b = 0; b < numBlocks; b++) {
+      const capacity = b < numG1Blocks ? messagePerG1 : messagePerG1 + 1;
+      const filled = Math.min(capacity, remainingC);
+      remainingC -= filled;
+      cPerBlock[b] = filled;
       pPerBlock[b] = capacity - filled;
     }
 
-    const blockVal = Array.from(
-      { length: blocks },
-      (_, index) =>
-        new Uint8Array(index < g1Blocks ? dataPerG1 + eccPerBlock : dataPerG1 + eccPerBlock + 1),
-    );
-
-    // visitAlignmentPatterns()
-    // visitTimingPatterns
+    // byte is the solve target, mask/value are the forced bits, weight is the
+    // total weight of forced bits which don't already match.
+    type Option = Break & { symbol: number; byte: number; weight: number };
+    const fixPerBlock: Option[][] = Array.from({ length: numBlocks }, () => []);
+    const breakPerBlock: Option[][] = Array.from({ length: numBlocks }, () => []);
 
     let bitIdx = 0;
-    let targetBuffer = [0, 0, 0, 0, 0, 0, 0, 0];
+    const targetBuffer = [0, 0, 0, 0, 0, 0, 0, 0];
 
+    const weightedStencil = this.weightedStencil;
     const masker = MASK_FUNC[mask];
-    iterateMostlyDataModules(qrWidth, (x, y) => {
-      const posIdx = y * qrWidth + x;
+    const width = version * 4 + 17;
+    iterateMostlyDataModules(width, (x, y) => {
+      const posIdx = y * width + x;
       if (matrix[posIdx] !== 0) return;
 
       let stencilVal = weightedStencil[posIdx];
@@ -160,99 +201,106 @@ export class PixelArtFixer implements Fixer {
       if (msbBitPos === 0) {
         let block;
         let symbol;
-        let preByteIdx;
+        let isContent = false;
         let actualByte;
 
-        if (postByteIdx < dataPerG1 * blocks) {
-          block = postByteIdx % blocks;
-          symbol = Math.floor(postByteIdx / blocks);
-
-          preByteIdx = block * dataPerG1 + Math.max(0, block - g1Blocks) + symbol;
-          actualByte = preByteArray[preByteIdx];
-        } else if (postByteIdx < dataCodewords) {
-          block = (postByteIdx % blocks) + g1Blocks;
-          symbol = dataPerG1;
-
-          preByteIdx = block * dataPerG1 + (block - g1Blocks) + symbol;
-          actualByte = preByteArray[preByteIdx];
+        if (postByteIdx < messagePerG1 * numBlocks) {
+          block = postByteIdx % numBlocks;
+          symbol = Math.floor(postByteIdx / numBlocks);
+          actualByte = messageBytes[blockStart(block) + symbol];
+          isContent = symbol < cPerBlock[block];
+        } else if (postByteIdx < numMessageBytes) {
+          block = (postByteIdx % numBlocks) + numG1Blocks;
+          symbol = messagePerG1;
+          actualByte = messageBytes[blockStart(block) + symbol];
+          isContent = symbol < cPerBlock[block];
         } else {
-          const eccIdx = postByteIdx - dataCodewords;
-          block = eccIdx % blocks;
-          symbol = Math.floor(eccIdx / blocks) + (block < g1Blocks ? dataPerG1 : dataPerG1 + 1);
+          const ecIdx = postByteIdx - numMessageBytes;
+          block = ecIdx % numBlocks;
+          symbol =
+            Math.floor(ecIdx / numBlocks) + (block < numG1Blocks ? messagePerG1 : messagePerG1 + 1);
+          // ec bytes aren't known yet, only their forced bits matter
           actualByte = 0b1010_1010;
         }
 
-        // TODO don't need ecc values
-        blockVal[block][symbol] = actualByte;
-
-        let byte = actualByte;
+        let forcedMask = 0;
+        let forcedValue = 0;
         let weight = 0;
         for (let i = 0; i < 8; i++) {
           const target = targetBuffer[i];
           const targetWeight = target >> 1;
           if (targetWeight === 0) continue;
-          const targetBit = target & 1;
-          const actualBit = (actualByte >> i) & 1;
-          if (targetBit === actualBit) continue;
-          weight += targetWeight;
-          byte ^= 1 << i;
+          forcedMask |= 1 << i;
+          forcedValue |= (target & 1) << i;
+          if (((actualByte >> i) & 1) !== (target & 1)) weight += targetWeight;
         }
-
-        const fixable = preByteIdx == null || symbol >= mPerBlock[block];
-
-        if (fixable) {
-          fixPerBlock[block].push({ symbol, byte, weight });
-        } else {
-          breakPerBlock[block].push({ symbol, byte, weight });
+        if (forcedMask !== 0) {
+          const option = {
+            symbol,
+            index: postByteIdx,
+            byte: (actualByte & ~forcedMask) | forcedValue,
+            mask: forcedMask,
+            value: forcedValue,
+            weight,
+          };
+          if (isContent) {
+            breakPerBlock[block].push(option);
+          } else {
+            fixPerBlock[block].push(option);
+          }
         }
       }
 
       bitIdx++;
     });
 
-    const breakLimit = Math.floor(eccPerBlock / 2) - 3;
-    for (let i = 0; i < blocks; i++) {
-      const fixable = pPerBlock[i];
-      const fixOptions = fixPerBlock[i];
-      const breakOptions = breakPerBlock[i];
+    const breaks: Break[] = [];
+    const breakLimit = Math.floor(ecPerBlock / 2) - 3;
+    for (let b = 0; b < numBlocks; b++) {
+      const fixable = pPerBlock[b];
+      const fixOptions = fixPerBlock[b];
+      const breakOptions = breakPerBlock[b];
 
       if (fixOptions.length > fixable) {
         fixOptions.sort((a, b) => b.weight - a.weight);
-        fixPerBlock[i] = fixOptions.slice(0, fixable);
         breakOptions.push(...fixOptions.slice(fixable));
+        fixOptions.length = fixable;
       }
 
       if (breakOptions.length > breakLimit) {
         breakOptions.sort((a, b) => b.weight - a.weight);
+        breakOptions.length = Math.max(0, breakLimit);
+      }
+      for (const { index, mask, value } of breakOptions) {
+        breaks.push({ index, mask, value });
       }
     }
+    this.breaks = breaks;
 
-    const broken: { index: number; value: number }[] = [];
-    const brokenBudget = Math.floor(eccPerBlock / 2) - 3;
-
-    let G = buildGeneratorMatrix(dataPerG1, eccPerBlock);
-    for (let b = 0; b < blocks; b++) {
-      if (b === g1Blocks) {
-        G = buildGeneratorMatrix(dataPerG1 + 1, eccPerBlock);
+    let G = buildGeneratorMatrix(messagePerG1, ecPerBlock);
+    for (let b = 0; b < numBlocks; b++) {
+      if (b === numG1Blocks) {
+        G = buildGeneratorMatrix(messagePerG1 + 1, ecPerBlock);
       }
 
-      const k = b < g1Blocks ? dataPerG1 : dataPerG1 + 1;
+      const k = b < numG1Blocks ? messagePerG1 : messagePerG1 + 1;
 
       const p = pPerBlock[b];
       if (p === 0) continue;
       const fixOptions = fixPerBlock[b];
       if (fixOptions.length === 0) continue;
-      const m = mPerBlock[b];
+      const m = cPerBlock[b];
+      const start = blockStart(b);
 
       const targetCols = new Uint8Array(k);
       const targetVals = new Uint8Array(k);
 
       for (let i = 0; i < m; i++) {
         targetCols[i] = i;
-        targetVals[i] = blockVal[b][i];
+        targetVals[i] = messageBytes[start + i];
       }
 
-      const fixes = Math.min(p, fixOptions.length);
+      const fixes = fixOptions.length;
       const taken = new Uint8Array(p);
       for (let i = 0; i < fixes; i++) {
         const { symbol, byte } = fixOptions[i];
@@ -267,7 +315,7 @@ export class PixelArtFixer implements Fixer {
       for (let i = m + fixes; i < k; i++) {
         while (taken[freePadding]) freePadding++;
         targetCols[i] = m + freePadding;
-        targetVals[i] = blockVal[b][m + freePadding];
+        targetVals[i] = messageBytes[start + m + freePadding];
         freePadding++;
       }
 
@@ -277,10 +325,20 @@ export class PixelArtFixer implements Fixer {
         return row;
       });
       const Minv = gf256MatrixInvert(Msub);
-      const solvedData = new Uint8Array(k);
+      const solved = new Uint8Array(k);
+
+      // TODO: only free padding needs to be calculated
       for (let i = 0; i < k; i++) {
-        for (let j = 0; j < k; j++) solvedData[i] ^= gf256Mul(Minv[i][j], targetVals[j]);
+        for (let j = 0; j < k; j++) solved[i] ^= gf256Mul(Minv[i][j], targetVals[j]);
       }
+      messageBytes.set(solved, start);
+    }
+  }
+
+  // overwrite intentional broken bytes
+  fixInterleaved(interleaved: Uint8Array) {
+    for (const { index, mask, value } of this.breaks) {
+      interleaved[index] = (interleaved[index] & ~mask) | value;
     }
   }
 }

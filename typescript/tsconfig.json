@@ -7,13 +7,14 @@
     "moduleDetection": "force",
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-
     "strict": true,
-
     "module": "NodeNext",
-    "outDir": "dist",
+    "rootDir": "..",
+    "outDir": "./dist",
     "declaration": true,
-
-    "lib": ["es2022", "dom"]
+    "lib": [
+      "es2022",
+      "dom"
+    ]
   }
 }
