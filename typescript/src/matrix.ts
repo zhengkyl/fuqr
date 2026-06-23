@@ -7,11 +7,11 @@ import {
   NUM_DATA_MODULES,
   NUM_EC_BYTES,
   VERSION_INFO,
-} from "./constants.js";
-import { generatorPolynomial, remainder } from "./ecc.js";
-import type { Encoder } from "./encoder.js";
-import type { Fixer } from "./fixer.js";
-import { Module, type Ecl, type Mask, type Version } from "./types.js";
+} from "./constants.ts";
+import { generatorPolynomial, remainder } from "./ecc.ts";
+import type { Encoder } from "./encoder.ts";
+import type { Fixer } from "./fixer.ts";
+import { Module, type Ecl, type Mask, type Version } from "./types.ts";
 
 export function buildMatrix(
   encoder: Encoder,

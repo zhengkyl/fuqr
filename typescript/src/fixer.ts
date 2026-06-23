@@ -1,8 +1,8 @@
-import { MASK_FUNC, NUM_BLOCKS, NUM_BYTES, NUM_EC_BYTES } from "./constants.js";
-import { buildGeneratorMatrix, gf256MatrixInvert, gf256Mul } from "./ecc.js";
-import type { Encoder } from "./encoder.js";
-import { iterateMostlyDataModules, visitAlignmentPatterns, visitTimingPatterns } from "./matrix.js";
-import { Module, type Ecl, type Mask, type Version } from "./types.js";
+import { MASK_FUNC, NUM_BLOCKS, NUM_BYTES, NUM_EC_BYTES } from "./constants.ts";
+import { buildGeneratorMatrix, generatorPolynomial, gf256Solve, remainder } from "./ecc.ts";
+import type { Encoder } from "./encoder.ts";
+import { iterateMostlyDataModules, visitAlignmentPatterns, visitTimingPatterns } from "./matrix.ts";
+import { Module, type Ecl, type Mask, type Version } from "./types.ts";
 
 // Consistent variable names
 //
@@ -277,61 +277,70 @@ export class PixelArtFixer implements Fixer {
     }
     this.breaks = breaks;
 
+    // A fix on a data column directly sets that byte, since those codeword
+    // bytes are systematic. A fix on an ec column couples the unknown padding,
+    // so only those require solving. G is systematic ([I | P]), so the system
+    // collapses to one equation and one unknown padding byte per ec fix.
+    const divisor = generatorPolynomial(ecPerBlock);
     let G = buildGeneratorMatrix(messagePerG1, ecPerBlock);
     for (let b = 0; b < numBlocks; b++) {
       if (b === numG1Blocks) {
         G = buildGeneratorMatrix(messagePerG1 + 1, ecPerBlock);
       }
 
-      const k = b < numG1Blocks ? messagePerG1 : messagePerG1 + 1;
-
       const p = pPerBlock[b];
       if (p === 0) continue;
+
       const fixOptions = fixPerBlock[b];
       if (fixOptions.length === 0) continue;
+
       const m = cPerBlock[b];
       const start = blockStart(b);
 
-      const targetCols = new Uint8Array(k);
-      const targetVals = new Uint8Array(k);
+      const k = b < numG1Blocks ? messagePerG1 : messagePerG1 + 1;
 
-      for (let i = 0; i < m; i++) {
-        targetCols[i] = i;
-        targetVals[i] = messageBytes[start + i];
-      }
-
-      const fixes = fixOptions.length;
+      // Apply data column fixes directly, collect ec column fixes to solve.
+      const ecFixes: Option[] = [];
       const taken = new Uint8Array(p);
-      for (let i = 0; i < fixes; i++) {
-        const { symbol, byte } = fixOptions[i];
-        if (symbol < k) {
-          taken[symbol - m] = 1;
+      for (const option of fixOptions) {
+        if (option.symbol < k) {
+          messageBytes[start + option.symbol] = option.byte;
+          taken[option.symbol - m] = 1;
+        } else {
+          ecFixes.push(option);
         }
-        targetCols[m + i] = symbol;
-        targetVals[m + i] = byte;
       }
 
-      let freePadding = 0;
-      for (let i = m + fixes; i < k; i++) {
-        while (taken[freePadding]) freePadding++;
-        targetCols[i] = m + freePadding;
-        targetVals[i] = messageBytes[start + m + freePadding];
-        freePadding++;
+      const t = ecFixes.length;
+      if (t === 0) continue;
+
+      // Leave one free padding byte unknown per ec fix, the rest keep their
+      // current value. Zero the unknowns so they drop out of the known parity.
+      const knownData = messageBytes.slice(start, start + k);
+      const unknownCols = new Uint8Array(t);
+      let padding = 0;
+      for (let i = 0; i < t; i++) {
+        while (taken[padding]) padding++;
+        unknownCols[i] = m + padding;
+        knownData[m + padding] = 0;
+        padding++;
       }
 
-      const Msub: Uint8Array[] = Array.from({ length: k }, (_, j) => {
-        const row = new Uint8Array(k);
-        for (let i = 0; i < k; i++) row[i] = G[i][targetCols[j]];
+      // Each ec fix must supply the parity the known data doesn't already give.
+      const knownEc = remainder(knownData, divisor);
+      const rhs = new Uint8Array(t);
+      for (let j = 0; j < t; j++) {
+        rhs[j] = ecFixes[j].byte ^ knownEc[ecFixes[j].symbol - k];
+      }
+
+      // A[j][i] is unknown column i's contribution to ec fix j's parity byte.
+      const A: Uint8Array[] = Array.from({ length: t }, (_, j) => {
+        const row = new Uint8Array(t);
+        for (let i = 0; i < t; i++) row[i] = G[unknownCols[i]][ecFixes[j].symbol];
         return row;
       });
-      const Minv = gf256MatrixInvert(Msub);
-      const solved = new Uint8Array(k);
-
-      // TODO: only free padding needs to be calculated
-      for (let i = 0; i < k; i++) {
-        for (let j = 0; j < k; j++) solved[i] ^= gf256Mul(Minv[i][j], targetVals[j]);
-      }
-      messageBytes.set(solved, start);
+      const solved = gf256Solve(A, rhs);
+      for (let i = 0; i < t; i++) messageBytes[start + unknownCols[i]] = solved[i];
     }
   }
 

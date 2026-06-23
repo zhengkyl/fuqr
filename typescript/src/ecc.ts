@@ -62,33 +62,36 @@ export function buildGeneratorMatrix(k: number, r: number): Uint8Array[] {
   return G;
 }
 
-// Inverts a k×k matrix over GF(256) via Gauss-Jordan elimination.
-export function gf256MatrixInvert(m: Uint8Array[]): Uint8Array[] {
-  const k = m.length;
-  const aug = m.map((row, i) => {
-    const r = new Uint8Array(k * 2);
+// Solves the k×k system A·x = b over GF(256) via Gauss-Jordan elimination.
+export function gf256Solve(A: Uint8Array[], b: Uint8Array): Uint8Array {
+  const k = A.length;
+  const aug = A.map((row, i) => {
+    const r = new Uint8Array(k + 1);
     r.set(row);
-    r[k + i] = 1;
+    r[k] = b[i];
     return r;
   });
 
   for (let col = 0; col < k; col++) {
     let pivotRow = -1;
     for (let row = col; row < k; row++) {
-      if (aug[row][col] !== 0) { pivotRow = row; break; }
+      if (aug[row][col] !== 0) {
+        pivotRow = row;
+        break;
+      }
     }
     if (pivotRow === -1) throw new Error("Singular matrix");
     [aug[col], aug[pivotRow]] = [aug[pivotRow], aug[col]];
 
     const pivotInv = EXP_TABLE[(255 - LOG_TABLE[aug[col][col]]) % 255];
-    for (let j = col; j < k * 2; j++) aug[col][j] = gf256Mul(aug[col][j], pivotInv);
+    for (let j = col; j <= k; j++) aug[col][j] = gf256Mul(aug[col][j], pivotInv);
 
     for (let row = 0; row < k; row++) {
       if (row === col || aug[row][col] === 0) continue;
       const factor = aug[row][col];
-      for (let j = col; j < k * 2; j++) aug[row][j] ^= gf256Mul(factor, aug[col][j]);
+      for (let j = col; j <= k; j++) aug[row][j] ^= gf256Mul(factor, aug[col][j]);
     }
   }
 
-  return aug.map((row) => row.slice(k));
+  return Uint8Array.from(aug, (row) => row[k]);
 }

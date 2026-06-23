@@ -1,20 +1,20 @@
-import { NUM_BYTES, NUM_EC_BYTES } from "./constants.js";
-import { ByteEncoder, type Encoder } from "./encoder.js";
-import { NoopFixer, type Fixer } from "./fixer.js";
-import { buildMatrix } from "./matrix.js";
-import { MAX_VERSION, QrError, type Ecl, type Mask, type Version } from "./types.js";
+import { NUM_BYTES, NUM_EC_BYTES } from "./constants.ts";
+import { ByteEncoder, type Encoder } from "./encoder.ts";
+import { NoopFixer, type Fixer } from "./fixer.ts";
+import { buildMatrix } from "./matrix.ts";
+import { MAX_VERSION, QrError, type Ecl, type Mask, type Version } from "./types.ts";
 
-export { NUM_BLOCKS, NUM_BYTES, NUM_DATA_MODULES, NUM_EC_BYTES } from "./constants.js";
-export { buildGeneratorMatrix, gf256MatrixInvert } from "./ecc.js";
-export { AlphanumericEncoder, ByteEncoder, NumericEncoder } from "./encoder.js";
-export type { Encoder } from "./encoder.js";
-export { NoopFixer, PixelArtFixer } from "./fixer.js";
-export type { Fixer } from "./fixer.js";
-export { buildMatrix, iterateMostlyDataModules } from "./matrix.js";
-export { imageToLogo, resizeStencil } from "./stencil.js";
-export type { Logo, Stencil } from "./stencil.js";
-export { MAX_VERSION, Module, QrError } from "./types.js";
-export type { Ecl, Mask, QrErrorCode, Version } from "./types.js";
+export { NUM_BLOCKS, NUM_BYTES, NUM_DATA_MODULES, NUM_EC_BYTES } from "./constants.ts";
+export { buildGeneratorMatrix } from "./ecc.ts";
+export { AlphanumericEncoder, ByteEncoder, NumericEncoder } from "./encoder.ts";
+export type { Encoder } from "./encoder.ts";
+export { NoopFixer, PixelArtFixer } from "./fixer.ts";
+export type { Fixer } from "./fixer.ts";
+export { buildMatrix, iterateMostlyDataModules } from "./matrix.ts";
+export { imageToLogo, resizeStencil } from "./stencil.ts";
+export type { Logo, Stencil } from "./stencil.ts";
+export { MAX_VERSION, Module, QrError } from "./types.ts";
+export type { Ecl, Mask, QrErrorCode, Version } from "./types.ts";
 
 // Find the minimum version and ECL where the content fits, adjusted by the fixer.
 export function findVersionEcl(
