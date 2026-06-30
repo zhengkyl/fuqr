@@ -1,28 +1,4 @@
-export interface Encoder {
-  bitLen(version: number): number;
-  encode(version: number, push: (bits: number, len: number) => void): void;
-}
-
-export class ByteEncoder implements Encoder {
-  public bytes: Uint8Array;
-  constructor(text: string) {
-    this.bytes = new TextEncoder().encode(text);
-  }
-  bitLen(version: number) {
-    const cci = version < 10 ? 8 : 16;
-    return 4 + cci + this.bytes.length * 8;
-  }
-  encode(version: number, push: (bits: number, len: number) => void) {
-    const cci = version < 10 ? 8 : 16;
-    const bytes = this.bytes;
-
-    push(0b0100, 4);
-    push(bytes.length, cci);
-    for (const b of bytes) {
-      push(b, 8);
-    }
-  }
-}
+import type { Encoder } from "../index.ts";
 
 export class NumericEncoder implements Encoder {
   public bytes: Uint8Array;
