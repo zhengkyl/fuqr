@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Kyle Zheng
+// Licensed under the MIT License.
+
 export function generate(
   text: string,
   options: {
@@ -60,7 +63,7 @@ export function renderSvg(
 ) {
   const {
     margin = 2,
-    attributes = `xmlns="http://www.w3.org/2000/svg" width="300px" height="300px"`,
+    attributes = 'xmlns="http://www.w3.org/2000/svg" width="300px" height="300px"',
   } = options;
 
   const stride = version * 4 + 17;
@@ -137,17 +140,6 @@ export function renderSvg(
   );
 }
 
-// A black or white QR square is a bit (sometimes module/pixel).
-// A group of eight QR bits is a byte (sometimes symbol/codeword).
-// Message and error correction bytes make up a block (sometimes codeword).
-// Blocks are interleaved and fill up the QR data section.
-//
-// Here is the hierarchy of vocabulary
-// |--------------------- data ----------------------|
-// |---------------- block ---------------|  ...etc
-// |---------- message ----------|-- ec --|
-// |--- content ---|-- padding --|
-
 export type Version = number; // 1 to 40 inclusive
 export type Ecl = 0 | 1 | 2 | 3;
 export type Mask = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -161,6 +153,28 @@ export const Module = {
   VERSION: 1 << 6,
   MODIFIER: 1 << 7,
 };
+
+export interface Encoder {
+  bitLen(version: number): number;
+  encode(version: number, push: (bits: number, len: number) => void): void;
+}
+
+export interface Plugin {
+  mutateCapacity(capacity: { version: Version; ecl: Ecl }, encoder: Encoder): void;
+  mutateMessage(
+    messageBytes: Uint8Array,
+    contentLen: number,
+    meta: {
+      matrix: Uint8Array;
+      version: Version;
+      ecl: Ecl;
+      mask: Mask;
+    },
+  ): void;
+  mutateSequence(interleaved: Uint8Array): void;
+  mutateMatrix(matrix: Uint8Array, version: Version): void;
+}
+
 export class FvqrError extends Error {
   code: string;
   constructor(code: string, message: string) {
@@ -170,10 +184,18 @@ export class FvqrError extends Error {
   }
 }
 
-export interface Encoder {
-  bitLen(version: number): number;
-  encode(version: number, push: (bits: number, len: number) => void): void;
-}
+// ---- INTERNAL API BELOW, USERS YE BE WARNED ----
+//
+// Definitions:
+// A black or white QR square is a bit (sometimes module/pixel).
+// A group of eight QR bits is a byte (sometimes symbol/codeword).
+// Message and error correction bytes make up a block (sometimes codeword).
+// Blocks are interleaved and fill up the QR data section.
+//
+// |--------------------- data ----------------------|
+// |---------------- block ---------------|  ...etc
+// |---------- message ----------|-- ec --|
+// |--- content ---|-- padding --|
 
 export class ByteEncoder implements Encoder {
   public bytes: Uint8Array;
@@ -220,22 +242,6 @@ export function determineCapacity(
   }
 
   throw new FvqrError("TEXT_TOO_LONG", `Cannot fit in version ${maxVersion}`);
-}
-
-export interface Plugin {
-  mutateCapacity(capacity: { version: Version; ecl: Ecl }, encoder: Encoder): void;
-  mutateMessage(
-    messageBytes: Uint8Array,
-    contentLen: number,
-    meta: {
-      matrix: Uint8Array;
-      version: Version;
-      ecl: Ecl;
-      mask: Mask;
-    },
-  ): void;
-  mutateSequence(interleaved: Uint8Array): void;
-  mutateMatrix(matrix: Uint8Array, version: Version): void;
 }
 
 export function buildMatrix(

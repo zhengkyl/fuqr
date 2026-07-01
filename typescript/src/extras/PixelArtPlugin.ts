@@ -15,7 +15,7 @@ import {
   type Version,
   visitAlignmentPatterns,
   visitTimingPatterns,
-} from "../index.ts";
+} from "../fvqr.ts";
 
 type Break = { index: number; mask: number; value: number };
 // Each weightedStencil value is (weight << 1) | bit, indexed by module position.
