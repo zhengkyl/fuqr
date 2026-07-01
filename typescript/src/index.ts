@@ -1,6 +1,7 @@
 export function generate(
   text: string,
   options: {
+    Encoder?: new (text: string) => Encoder;
     minVersion?: Version;
     maxVersion?: Version;
     minEcl?: Ecl;
@@ -9,8 +10,15 @@ export function generate(
   } = {},
   plugins: Plugin[] = [],
 ) {
-  const encoder = new ByteEncoder(text);
-  const { minVersion = 1, maxVersion = 40, minEcl = 0, maxEcl = 3, mask = 2 } = options;
+  const {
+    minVersion = 1,
+    maxVersion = 40,
+    minEcl = 0,
+    maxEcl = 3,
+    mask = 2,
+    Encoder = ByteEncoder,
+  } = options;
+  const encoder = new Encoder(text);
 
   const { version, ecl } = findCapacity(
     encoder,
@@ -18,6 +26,82 @@ export function generate(
     plugins,
   );
   return buildMatrix(encoder, { version, ecl, mask }, plugins);
+}
+
+export function renderSvg({ matrix, version }: { matrix: Uint8Array; version: Version }) {
+  const stride = version * 4 + 17;
+  const edges = stride + 1;
+
+  const next = new Map<number, number[]>();
+  const addEdge = (x1: number, y1: number, x2: number, y2: number) => {
+    const from = x1 * edges + y1;
+    const to = x2 * edges + y2;
+    const back = next.get(to);
+    if (back) {
+      const i = back.indexOf(from);
+      if (i !== -1) {
+        if (back.length === 1) {
+          next.delete(to);
+        } else {
+          back.splice(i, 1);
+        }
+        return;
+      }
+    }
+    const list = next.get(from);
+    if (list) list.push(to);
+    else next.set(from, [to]);
+  };
+
+  for (let y = 0; y < stride; y++) {
+    for (let x = 0; x < stride; x++) {
+      if ((matrix[y * stride + x] & Module.ON) === 0) continue;
+      addEdge(x, y, x + 1, y);
+      addEdge(x + 1, y, x + 1, y + 1);
+      addEdge(x + 1, y + 1, x, y + 1);
+      addEdge(x, y + 1, x, y);
+    }
+  }
+
+  const margin = 2;
+  let d = "";
+  for (const start of [...next.keys()]) {
+    if (!next.has(start)) continue;
+
+    d += `M${margin + Math.floor(start / edges)},${margin + (start % edges)}`;
+
+    let dx = 0;
+    let dy = 0;
+    let run = 0;
+    let curr = start;
+    do {
+      const list = next.get(curr)!;
+      const to = list.pop()!;
+      if (list.length === 0) next.delete(curr);
+
+      const ndx = Math.floor(to / edges) - Math.floor(curr / edges);
+      const ndy = (to % edges) - ((curr % stride) + 1);
+      if (ndx === dx && ndy === dy) {
+        run += ndx + ndy;
+      } else {
+        if (run) d += dx !== 0 ? `h${run}` : `v${run}`;
+        dx = ndx;
+        dy = ndy;
+        run = ndx + ndy;
+      }
+      curr = to;
+    } while (curr !== start);
+    d += dx !== 0 ? `h${run}` : `v${run}`;
+    d += "z";
+  }
+
+  const width = stride + 2 * margin;
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${width}" width="300px" height="300px">` +
+    `<rect width="${width}" height="${width}" fill="#fff"/>` +
+    `<path fill="#000" d="${d}"/>` +
+    `</svg>`
+  );
 }
 
 // A black or white QR square is a bit (sometimes module/pixel).
