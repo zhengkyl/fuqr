@@ -20,7 +20,7 @@ export function generate(
   } = options;
   const encoder = new Encoder(text);
 
-  const { version, ecl } = findCapacity(
+  const { version, ecl } = determineCapacity(
     encoder,
     { minVersion, maxVersion, minEcl, maxEcl },
     plugins,
@@ -28,7 +28,41 @@ export function generate(
   return buildMatrix(encoder, { version, ecl, mask }, plugins);
 }
 
-export function renderSvg({ matrix, version }: { matrix: Uint8Array; version: Version }) {
+export function renderCanvas(
+  { matrix, version }: { matrix: Uint8Array; version: Version },
+  options: { margin?: number; scale?: number; canvas?: HTMLCanvasElement } = {},
+) {
+  const { margin = 2, scale = 10, canvas = document.createElement("canvas") } = options;
+  const stride = version * 4 + 17;
+  const width = (stride + 2 * margin) * scale;
+
+  canvas.width = width;
+  canvas.height = width;
+
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, width, width);
+
+  ctx.fillStyle = "#000";
+  for (let y = 0; y < stride; y++) {
+    for (let x = 0; x < stride; x++) {
+      if (matrix[y * stride + x] & Module.ON) {
+        ctx.fillRect((x + margin) * scale, (y + margin) * scale, scale, scale);
+      }
+    }
+  }
+  return canvas;
+}
+
+export function renderSvg(
+  { matrix, version }: { matrix: Uint8Array; version: Version },
+  options: { margin?: number; attributes?: string } = {},
+) {
+  const {
+    margin = 2,
+    attributes = `xmlns="http://www.w3.org/2000/svg" width="300px" height="300px"`,
+  } = options;
+
   const stride = version * 4 + 17;
   const edges = stride + 1;
 
@@ -63,7 +97,6 @@ export function renderSvg({ matrix, version }: { matrix: Uint8Array; version: Ve
     }
   }
 
-  const margin = 2;
   let d = "";
   for (const start of [...next.keys()]) {
     if (!next.has(start)) continue;
@@ -97,7 +130,7 @@ export function renderSvg({ matrix, version }: { matrix: Uint8Array; version: Ve
 
   const width = stride + 2 * margin;
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${width}" width="300px" height="300px">` +
+    `<svg ${attributes.length ? attributes + " " : ""}viewBox="0 0 ${width} ${width}">` +
     `<rect width="${width}" height="${width}" fill="#fff"/>` +
     `<path fill="#000" d="${d}"/>` +
     `</svg>`
@@ -163,7 +196,7 @@ export class ByteEncoder implements Encoder {
   }
 }
 
-export function findCapacity(
+export function determineCapacity(
   encoder: Encoder,
   options: { minVersion: Version; maxVersion: Version; minEcl: Ecl; maxEcl: Ecl },
   plugins: Plugin[],
@@ -281,12 +314,15 @@ export function buildMatrix(
 
   const divisor = generatorPolynomial(ecPerBlock);
   for (let i = 0; i < g1Blocks; i++) {
-    const ec = remainder(messageBytes.subarray(i * messagePerG1, (i + 1) * messagePerG1), divisor);
+    const ec = polynomialRemainder(
+      messageBytes.subarray(i * messagePerG1, (i + 1) * messagePerG1),
+      divisor,
+    );
     for (let j = 0; j < ecPerBlock; j++) interleaved[numMessageBytes + j * blocks + i] = ec[j];
   }
   const g2Start = numG1;
   for (let i = 0; i < g2Blocks; i++) {
-    const ec = remainder(
+    const ec = polynomialRemainder(
       messageBytes.subarray(g2Start + i * messagePerG2, g2Start + (i + 1) * messagePerG2),
       divisor,
     );
@@ -468,7 +504,7 @@ export const LOG_TABLE = new Uint8Array(256);
   }
 }
 
-export function remainder(data: Uint8Array, generator: Uint8Array): Uint8Array {
+export function polynomialRemainder(data: Uint8Array, generator: Uint8Array): Uint8Array {
   const base = new Uint8Array(data.length + generator.length);
   base.set(data);
   for (let i = 0; i < data.length; i++) {

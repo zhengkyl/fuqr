@@ -11,7 +11,7 @@ import {
   NUM_DATA_BITS,
   NUM_EC_BYTES,
   type Plugin,
-  remainder,
+  polynomialRemainder,
   type Version,
   visitAlignmentPatterns,
   visitTimingPatterns,
@@ -325,7 +325,7 @@ function solveBlock(
 
   const known = data.slice(base, base + k);
   for (const col of unknownCols) known[col] = 0;
-  const knownEc = remainder(known, divisor);
+  const knownEc = polynomialRemainder(known, divisor);
   const rhs = new Uint8Array(t);
   for (let j = 0; j < t; j++) rhs[j] = ecFixes[j].byte ^ knownEc[ecFixes[j].symbol - k];
 
@@ -352,7 +352,7 @@ export function buildGeneratorMatrix(k: number, r: number): Uint8Array[] {
     row[i] = 1;
     const basis = new Uint8Array(k);
     basis[i] = 1;
-    row.set(remainder(basis, divisor), k);
+    row.set(polynomialRemainder(basis, divisor), k);
     G.push(row);
   }
   return G;
