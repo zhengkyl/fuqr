@@ -159,20 +159,21 @@ export interface Encoder {
   encode(version: number, push: (bits: number, len: number) => void): void;
 }
 
+export interface PluginHookCtx {
+  version: Version;
+  ecl: Ecl;
+  mask: Mask;
+  matrix: Uint8Array;
+}
+
 export interface Plugin {
-  mutateCapacity(capacity: { version: Version; ecl: Ecl }, encoder: Encoder): void;
-  mutateMessage(
-    messageBytes: Uint8Array,
-    contentLen: number,
-    meta: {
-      matrix: Uint8Array;
-      version: Version;
-      ecl: Ecl;
-      mask: Mask;
-    },
+  mutateCapacity?(
+    capacity: { version: Version; ecl: Ecl },
+    ctx: { minVersion: Version; maxVersion: Version; minEcl: Ecl; maxEcl: Ecl },
   ): void;
-  mutateSequence(interleaved: Uint8Array): void;
-  mutateMatrix(matrix: Uint8Array, version: Version): void;
+  mutateMessage?(messageBytes: Uint8Array, ctx: PluginHookCtx & { paddingStart: number }): void;
+  mutateSequence?(interleaved: Uint8Array, ctx: PluginHookCtx): void;
+  mutateMatrix?(matrix: Uint8Array, ctx: PluginHookCtx): void;
 }
 
 export class FvqrError extends Error {
@@ -236,7 +237,7 @@ export function determineCapacity(
       }
 
       const capacity = { version, ecl };
-      plugins.forEach((p) => p.mutateCapacity(capacity, encoder));
+      plugins.forEach((p) => p.mutateCapacity?.(capacity, options));
       return capacity;
     }
   }
@@ -280,7 +281,7 @@ export function buildMatrix(
   push(0, remainingDataBits < 4 ? remainingDataBits : 4);
   push(0, (8 - bufLen) & 7);
 
-  const contentLen = bytePos;
+  const paddingStart = bytePos;
   let alternating = 0b1110_1100;
   for (let i = bytePos; i < numMessageBytes; i++) {
     push(alternating, 8);
@@ -296,7 +297,8 @@ export function buildMatrix(
   visitAlignmentPatterns(version, width, set);
   visitVersionInfo(version, width, set);
 
-  plugins.forEach((p) => p.mutateMessage(messageBytes, contentLen, { matrix, version, ecl, mask }));
+  const ctx = { version, ecl, mask, matrix, paddingStart };
+  plugins.forEach((p) => p.mutateMessage?.(messageBytes, ctx));
 
   const blocks = NUM_BLOCKS[version][ecl];
   const g2Blocks = numBytes % blocks;
@@ -336,7 +338,7 @@ export function buildMatrix(
       interleaved[numMessageBytes + j * blocks + i + g1Blocks] = ec[j];
   }
 
-  plugins.forEach((p) => p.mutateSequence(interleaved));
+  plugins.forEach((p) => p.mutateSequence?.(interleaved, ctx));
 
   let bitIdx = 0;
   const masker = MASKERS[mask];
@@ -348,7 +350,7 @@ export function buildMatrix(
     }
   });
 
-  plugins.forEach((p) => p.mutateMatrix(matrix, version));
+  plugins.forEach((p) => p.mutateMatrix?.(matrix, ctx));
 
   return { matrix, version, ecl, mask };
 }

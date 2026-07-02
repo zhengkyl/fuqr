@@ -1,18 +1,16 @@
 import {
-  type Ecl,
   EXP_TABLE,
   generatorPolynomial,
   iterateMostlyDataModules,
   LOG_TABLE,
-  type Mask,
   MASKERS,
   Module,
   NUM_BLOCKS,
   NUM_DATA_BITS,
   NUM_EC_BYTES,
   type Plugin,
+  type PluginHookCtx,
   polynomialRemainder,
-  type Version,
   visitAlignmentPatterns,
   visitTimingPatterns,
 } from "../fvqr.ts";
@@ -43,10 +41,8 @@ export class PixelArtPlugin implements Plugin {
     this.reservedEc = reservedEc;
   }
 
-  mutateCapacity(capacity: { version: Version; ecl: Ecl }) {}
-
   // draw over timing and all alignment patterns except the only used (bottom right)
-  mutateMatrix(matrix: Uint8Array, version: Version) {
+  mutateMatrix(matrix: Uint8Array, { version }: Omit<PluginHookCtx, "matrix">) {
     const weightedStencil = this.weightedStencil;
     const width = version * 4 + 17;
     const override = (x: number, y: number) => {
@@ -64,17 +60,8 @@ export class PixelArtPlugin implements Plugin {
     });
   }
 
-  mutateMessage(
-    messageBytes: Uint8Array,
-    contentLen: number,
-    meta: {
-      matrix: Uint8Array;
-      version: Version;
-      ecl: Ecl;
-      mask: Mask;
-    },
-  ) {
-    const { version, ecl } = meta;
+  mutateMessage(messageBytes: Uint8Array, ctx: PluginHookCtx & { paddingStart: number }) {
+    const { version, ecl, mask, matrix, paddingStart } = ctx;
     const numBytes = NUM_DATA_BITS[version] >> 3;
     const numEcBytes = NUM_EC_BYTES[version][ecl];
     const numMessageBytes = numBytes - numEcBytes;
@@ -96,7 +83,7 @@ export class PixelArtPlugin implements Plugin {
 
     const cPerBlock = Array.from({ length: numBlocks }, () => 0);
     const pPerBlock = Array.from({ length: numBlocks }, () => 0);
-    let remainingC = contentLen;
+    let remainingC = paddingStart;
     for (let b = 0; b < numBlocks; b++) {
       const capacity = b < numG1Blocks ? messagePerG1 : messagePerG1 + 1;
       const filled = Math.min(capacity, remainingC);
@@ -115,8 +102,6 @@ export class PixelArtPlugin implements Plugin {
     const targetBuffer = [0, 0, 0, 0, 0, 0, 0, 0];
 
     const weightedStencil = this.weightedStencil;
-
-    const { matrix, mask } = meta;
 
     const masker = MASKERS[mask];
     const width = version * 4 + 17;

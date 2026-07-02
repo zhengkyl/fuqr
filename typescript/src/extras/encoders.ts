@@ -201,7 +201,7 @@ export class MixedEncoder implements Encoder {
     return cost;
   }
 
-  encode(version: number, push: (bits: number, len: number) => void): void {
+  encode(version: number, push: (bits: number, len: number) => void) {
     if (this.version !== version) this.bitLen(version);
 
     const bytes = this.bytes;
