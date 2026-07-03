@@ -12,7 +12,7 @@ import {
   visitFormatInfo,
   visitTimingPatterns,
   visitVersionInfo,
-} from "../fvqr.ts";
+} from "../fuqr.ts";
 
 // Per-module info + derived layout. Low byte = Module flags; high bits =
 // codeword key ((block<<8|offset)+1, 0 if none), so (key-1)>>8 is its block.

@@ -1,22 +1,24 @@
 {
-  // Based on https://www.totaltypescript.com/tsconfig-cheat-sheet
   "compilerOptions": {
-    "esModuleInterop": true,
-    "skipLibCheck": true,
+    // shared
     "target": "es2022",
-    "moduleDetection": "force",
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "allowImportingTsExtensions": true,
-    "rewriteRelativeImportExtensions": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "strict": true,
-    "module": "NodeNext",
-    "rootDir": "..",
-    "outDir": "./dist",
-    "declaration": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
     "lib": [
       "es2022",
       "dom"
-    ]
+    ],
+    // library build: emit dist/ from src/
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "declaration": true,
+    "types": []
   }
 }

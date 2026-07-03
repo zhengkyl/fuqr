@@ -13,7 +13,7 @@ import {
   polynomialRemainder,
   visitAlignmentPatterns,
   visitTimingPatterns,
-} from "../fvqr.ts";
+} from "../fuqr.ts";
 
 type Break = { index: number; mask: number; value: number };
 // Each weightedStencil value is (weight << 1) | bit, indexed by module position.

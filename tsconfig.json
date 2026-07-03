@@ -1,20 +1,25 @@
 {
   "compilerOptions": {
-    "esModuleInterop": true,
-    "skipLibCheck": true,
+    // shared
     "target": "es2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "strict": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
     "lib": [
       "es2022",
       "dom"
+    ],
+    // root: typecheck everything, emit nothing
+    "noEmit": true,
+    "types": [
+      "node"
     ]
   },
   "include": [
+    "examples/**/*.ts",
     "tests/**/*.ts",
-    "typescript/**/*.ts",
+    "typescript/**/*.ts"
   ]
 }

@@ -1,4 +1,4 @@
-import type { Encoder } from "../fvqr.ts";
+import type { Encoder } from "../fuqr.ts";
 
 export class NumericEncoder implements Encoder {
   public bytes: Uint8Array;

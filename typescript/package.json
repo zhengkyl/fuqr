@@ -1,19 +1,26 @@
 {
-  "name": "fvqr",
+  "name": "fuqr",
   "version": "2.0.0",
-  "description": "A small and opinionated QR code generator that only supports 99% of usecases",
+  "description": "A small and hackable QR code generator",
   "license": "MIT",
   "author": "Kyle Zheng <kylezheng73@gmail.com>",
   "files": [
     "dist/"
   ],
   "type": "module",
-  "main": "dist/qr.js",
-  "types": "dist/qr.d.ts",
+  "main": "dist/fuqr.js",
+  "types": "dist/fuqr.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/fuqr.d.ts",
+      "default": "./dist/fuqr.js"
+    },
+    "./extras/*": {
+      "types": "./dist/extras/*.d.ts",
+      "default": "./dist/extras/*.js"
+    }
+  },
   "scripts": {
     "build": "tsc"
-  },
-  "devDependencies": {
-    "typescript": "^5.8.2"
   }
 }

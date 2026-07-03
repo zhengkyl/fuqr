@@ -1,4 +1,4 @@
-import { FvqrError, Module, type Ecl, type Plugin, type Version } from "../fvqr.ts";
+import { FvqrError, Module, type Ecl, type Plugin, type Version } from "../fuqr.ts";
 import { buildBlueprint } from "./blueprint.ts";
 
 export class FittedLogoPlugin implements Plugin {
