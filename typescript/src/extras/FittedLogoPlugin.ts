@@ -1,19 +1,5 @@
-import {
-  FvqrError,
-  iterateMostlyDataModules,
-  Module,
-  NUM_BLOCKS,
-  NUM_DATA_BITS,
-  NUM_EC_BYTES,
-  visitAlignmentPatterns,
-  visitFinderPatterns,
-  visitFormatInfo,
-  visitTimingPatterns,
-  visitVersionInfo,
-  type Ecl,
-  type Plugin,
-  type Version,
-} from "../fvqr.ts";
+import { FvqrError, Module, type Ecl, type Plugin, type Version } from "../fvqr.ts";
+import { buildBlueprint } from "./blueprint.ts";
 
 export class FittedLogoPlugin implements Plugin {
   stencil: Stencil;
@@ -67,19 +53,19 @@ export class FittedLogoPlugin implements Plugin {
       }
       this.coveredPositions = positions;
 
-      const { matrix, threshold } = generateCodewordMatrix(version, ecl);
-      const blocks = NUM_BLOCKS[version][ecl];
+      const { matrix, ecPerBlock, blocks } = buildBlueprint(version, ecl);
       const blockErrors = new Uint16Array(blocks);
       const seen = new Set<number>();
       for (const pos of positions) {
-        const val = matrix[pos];
-        if (val === 0 || seen.has(val)) continue;
-        seen.add(val);
-        blockErrors[(val - 1) >> 8]++;
+        const key = matrix[pos] >> 8;
+        if (key === 0 || seen.has(key)) continue;
+        seen.add(key);
+        blockErrors[(key - 1) >> 8]++;
       }
 
+      const errorCapacity = ecPerBlock >> 1;
       for (let b = 0; b < blocks; b++) {
-        if (blockErrors[b] > threshold - this.reserve) return false;
+        if (blockErrors[b] > errorCapacity - this.reserve) return false;
       }
       return true;
     };
@@ -99,52 +85,6 @@ export class FittedLogoPlugin implements Plugin {
   }
 }
 
-function generateCodewordMatrix(
-  version: Version,
-  ecl: Ecl,
-): { matrix: Uint16Array; threshold: number } {
-  const width = version * 4 + 17;
-  const numBytes = Math.floor(NUM_DATA_BITS[version] / 8);
-  const numEcBytes = NUM_EC_BYTES[version][ecl];
-  const numMessageBytes = numBytes - numEcBytes;
-  const blocks = NUM_BLOCKS[version][ecl];
-  const g1Blocks = blocks - (numBytes % blocks);
-  const messagePerG1 = Math.floor(numMessageBytes / blocks);
-  const ecPerBlock = numEcBytes / blocks;
-
-  // Codeword index (in interleaved order) -> packed block/offset key.
-  const cwToPacked = new Uint16Array(numBytes);
-  const blockOffset = new Uint8Array(blocks);
-  for (let c = 0; c < numMessageBytes; c++) {
-    const block = c < messagePerG1 * blocks ? c % blocks : g1Blocks + (c - messagePerG1 * blocks);
-    cwToPacked[c] = ((block << 8) | blockOffset[block]++) + 1;
-  }
-  for (let c = numMessageBytes; c < numBytes; c++) {
-    const block = (c - numMessageBytes) % blocks;
-    cwToPacked[c] = ((block << 8) | blockOffset[block]++) + 1;
-  }
-
-  const matrix = new Uint16Array(width * width);
-  const reserve = (x: number, y: number) => (matrix[y * width + x] = 0xffff);
-  visitFinderPatterns(width, reserve);
-  visitTimingPatterns(width, reserve);
-  visitFormatInfo(ecl, 0, width, reserve);
-  visitAlignmentPatterns(version, width, reserve);
-  visitVersionInfo(version, width, reserve);
-
-  let bitIdx = 0;
-  iterateMostlyDataModules(width, (x, y) => {
-    const pos = y * width + x;
-    if (matrix[pos] !== 0) return;
-    const byteIdx = bitIdx >> 3;
-    if (byteIdx < numBytes) matrix[pos] = cwToPacked[byteIdx];
-    bitIdx++;
-  });
-
-  for (let i = 0; i < matrix.length; i++) if (matrix[i] === 0xffff) matrix[i] = 0;
-
-  return { matrix, threshold: ecPerBlock >> 1 };
-}
 export type Stencil = {
   width: number;
   height: number;
