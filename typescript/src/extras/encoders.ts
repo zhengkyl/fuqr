@@ -2,10 +2,10 @@ import type { Encoder } from "../fuqr.ts";
 
 export class NumericEncoder implements Encoder {
   public bytes: Uint8Array;
-  constructor(text: string) {
-    const bytes = new Uint8Array(text.length);
-    for (let i = 0; i < text.length; i++) {
-      bytes[i] = text.charCodeAt(i);
+  constructor(content: string) {
+    const bytes = new Uint8Array(content.length);
+    for (let i = 0; i < content.length; i++) {
+      bytes[i] = content.charCodeAt(i);
     }
     this.bytes = bytes;
   }
@@ -58,11 +58,10 @@ export class AlphanumericEncoder implements Encoder {
   }
 
   public bytes: Uint8Array;
-
-  constructor(text: string) {
-    const bytes = new Uint8Array(text.length);
-    for (let i = 0; i < text.length; i++) {
-      bytes[i] = text.charCodeAt(i);
+  constructor(content: string) {
+    const bytes = new Uint8Array(content.length);
+    for (let i = 0; i < content.length; i++) {
+      bytes[i] = content.charCodeAt(i);
     }
     this.bytes = bytes;
   }
@@ -95,11 +94,13 @@ export class AlphanumericEncoder implements Encoder {
 export class MixedEncoder implements Encoder {
   public bytes: Uint8Array;
   public modes: Uint8Array;
-  public segments: { mode: number; start: number; end: number }[] = [];
-  public version = 0;
+  public segments: { mode: number; start: number; end: number }[];
+  public version: number;
+  constructor(content: string) {
+    this.segments = [];
+    this.version = 0;
 
-  constructor(text: string) {
-    const bytes = new TextEncoder().encode(text);
+    const bytes = new TextEncoder().encode(content);
     const modes = new Uint8Array(bytes.length);
 
     for (let i = 0; i < bytes.length; i++) {

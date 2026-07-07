@@ -1,34 +1,45 @@
 // Copyright (c) 2026 Kyle Zheng
 // Licensed under the MIT License.
 
-export function generate(
-  text: string,
-  options: {
-    Encoder?: new (text: string) => Encoder;
-    minVersion?: Version;
-    maxVersion?: Version;
-    minEcl?: Ecl;
-    maxEcl?: Ecl;
-    mask?: Mask;
-  } = {},
+export type Version = number; // 1 to 40 inclusive
+export type Ecl = 0 | 1 | 2 | 3;
+export type Mask = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export type QrCode = {
+  matrix: Uint8Array;
+} & Details;
+
+export type Details = {
+  version: Version;
+  ecl: Ecl;
+  mask: Mask;
+};
+
+export type GenerateOptions = {
+  minVersion?: Version;
+  maxVersion?: Version;
+  minEcl?: Ecl;
+  maxEcl?: Ecl;
+  mask?: Mask;
+};
+
+export function generate(content: string, options: GenerateOptions = {}, plugins: Plugin[] = []) {
+  return generateWithEncoder(new ByteEncoder(content), options, plugins);
+}
+
+export function generateWithEncoder(
+  encoder: Encoder,
+  options: GenerateOptions = {},
   plugins: Plugin[] = [],
 ) {
-  const {
-    minVersion = 1,
-    maxVersion = 40,
-    minEcl = 0,
-    maxEcl = 3,
-    mask = 2,
-    Encoder = ByteEncoder,
-  } = options;
-  const encoder = new Encoder(text);
+  const { minVersion = 1, maxVersion = 40, minEcl = 0, maxEcl = 3, mask = 2 } = options;
 
-  const { version, ecl } = determineCapacity(
+  const details = determineDetails(
     encoder,
-    { minVersion, maxVersion, minEcl, maxEcl },
+    { minVersion, maxVersion, minEcl, maxEcl, mask },
     plugins,
   );
-  return buildMatrix(encoder, { version, ecl, mask }, plugins);
+  return buildMatrix(encoder, details, plugins);
 }
 
 export function renderCanvas(
@@ -116,7 +127,7 @@ export function renderSvg(
       if (list.length === 0) next.delete(curr);
 
       const ndx = Math.floor(to / edges) - Math.floor(curr / edges);
-      const ndy = (to % edges) - ((curr % stride) + 1);
+      const ndy = (to % edges) - (curr % edges);
       if (ndx === dx && ndy === dy) {
         run += ndx + ndy;
       } else {
@@ -140,9 +151,6 @@ export function renderSvg(
   );
 }
 
-export type Version = number; // 1 to 40 inclusive
-export type Ecl = 0 | 1 | 2 | 3;
-export type Mask = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export const Module = {
   ON: 1 << 0,
   DATA: 1 << 1,
@@ -159,28 +167,23 @@ export interface Encoder {
   encode(version: number, push: (bits: number, len: number) => void): void;
 }
 
-export interface PluginHookCtx {
-  version: Version;
-  ecl: Ecl;
-  mask: Mask;
-  matrix: Uint8Array;
-}
-
 export interface Plugin {
-  mutateCapacity?(
-    capacity: { version: Version; ecl: Ecl },
-    ctx: { minVersion: Version; maxVersion: Version; minEcl: Ecl; maxEcl: Ecl },
+  mutateDetails?(details: Details, options: Required<GenerateOptions>): void;
+  mutateMessage?(
+    messageBytes: Uint8Array,
+    paddingStart: number,
+    matrix: Uint8Array,
+    details: Details,
   ): void;
-  mutateMessage?(messageBytes: Uint8Array, ctx: PluginHookCtx & { paddingStart: number }): void;
-  mutateSequence?(interleaved: Uint8Array, ctx: PluginHookCtx): void;
-  mutateMatrix?(matrix: Uint8Array, ctx: PluginHookCtx): void;
+  mutateSequence?(interleaved: Uint8Array, matrix: Uint8Array, details: Details): void;
+  mutateMatrix?(matrix: Uint8Array, details: Details): void;
 }
 
-export class FvqrError extends Error {
+export class FuqrError extends Error {
   code: string;
   constructor(code: string, message: string) {
     super(message);
-    this.name = "FvqrError";
+    this.name = "FuqrError";
     this.code = code;
   }
 }
@@ -200,8 +203,8 @@ export class FvqrError extends Error {
 
 export class ByteEncoder implements Encoder {
   public bytes: Uint8Array;
-  constructor(text: string) {
-    this.bytes = new TextEncoder().encode(text);
+  constructor(content: string) {
+    this.bytes = new TextEncoder().encode(content);
   }
   bitLen(version: number) {
     const cci = version < 10 ? 8 : 16;
@@ -219,12 +222,12 @@ export class ByteEncoder implements Encoder {
   }
 }
 
-export function determineCapacity(
+export function determineDetails(
   encoder: Encoder,
-  options: { minVersion: Version; maxVersion: Version; minEcl: Ecl; maxEcl: Ecl },
+  options: Required<GenerateOptions>,
   plugins: Plugin[],
-): { version: Version; ecl: Ecl } {
-  const { minVersion, maxVersion, minEcl, maxEcl } = options;
+) {
+  const { minVersion, maxVersion, minEcl, maxEcl, mask } = options;
 
   for (let version = minVersion; version <= maxVersion; version++) {
     const reqBytes = Math.ceil(encoder.bitLen(version) / 8);
@@ -236,25 +239,25 @@ export function determineCapacity(
         ecl++;
       }
 
-      const capacity = { version, ecl };
-      plugins.forEach((p) => p.mutateCapacity?.(capacity, options));
-      return capacity;
+      const details = { version, ecl, mask };
+      plugins.forEach((p) => p.mutateDetails?.(details, options));
+      return details;
     }
   }
 
-  throw new FvqrError("TEXT_TOO_LONG", `Cannot fit in version ${maxVersion}`);
+  throw new FuqrError("TEXT_TOO_LONG", `Cannot fit in version ${maxVersion}`);
 }
 
 export function buildMatrix(
   encoder: Encoder,
-  meta: {
+  details: {
     version: Version;
     ecl: Ecl;
     mask: Mask;
   },
   plugins: Plugin[],
-): { matrix: Uint8Array; version: Version; ecl: Ecl; mask: Mask } {
-  const { version, ecl, mask } = meta;
+) {
+  const { version, ecl, mask } = details;
 
   const numModules = NUM_DATA_BITS[version];
   const numBytes = Math.floor(numModules / 8);
@@ -297,8 +300,7 @@ export function buildMatrix(
   visitAlignmentPatterns(version, width, set);
   visitVersionInfo(version, width, set);
 
-  const ctx = { version, ecl, mask, matrix, paddingStart };
-  plugins.forEach((p) => p.mutateMessage?.(messageBytes, ctx));
+  plugins.forEach((p) => p.mutateMessage?.(messageBytes, paddingStart, matrix, details));
 
   const blocks = NUM_BLOCKS[version][ecl];
   const g2Blocks = numBytes % blocks;
@@ -338,7 +340,7 @@ export function buildMatrix(
       interleaved[numMessageBytes + j * blocks + i + g1Blocks] = ec[j];
   }
 
-  plugins.forEach((p) => p.mutateSequence?.(interleaved, ctx));
+  plugins.forEach((p) => p.mutateSequence?.(interleaved, matrix, details));
 
   let bitIdx = 0;
   const masker = MASKERS[mask];
@@ -350,9 +352,9 @@ export function buildMatrix(
     }
   });
 
-  plugins.forEach((p) => p.mutateMatrix?.(matrix, ctx));
+  plugins.forEach((p) => p.mutateMatrix?.(matrix, details));
 
-  return { matrix, version, ecl, mask };
+  return { matrix, ...details };
 }
 
 export function iterateMostlyDataModules(width: number, callback: (x: number, y: number) => void) {
@@ -484,15 +486,23 @@ export function visitFormatInfo(
   set: (x: number, y: number, value: number) => void,
 ) {
   const formatInfo = FORMAT_INFO[ecl][mask];
-  for (let i = 0; i < 6; i++) set(8, i, Module.FORMAT | ((formatInfo >> i) & Module.ON));
+  for (let i = 0; i < 6; i++) {
+    set(8, i, Module.FORMAT | ((formatInfo >> i) & Module.ON));
+  }
   set(8, 7, Module.FORMAT | ((formatInfo >> 6) & Module.ON));
   set(8, 8, Module.FORMAT | ((formatInfo >> 7) & Module.ON));
   set(7, 8, Module.FORMAT | ((formatInfo >> 8) & Module.ON));
-  for (let i = 9; i < 15; i++) set(14 - i, 8, Module.FORMAT | ((formatInfo >> i) & Module.ON));
+  for (let i = 9; i < 15; i++) {
+    set(14 - i, 8, Module.FORMAT | ((formatInfo >> i) & Module.ON));
+  }
 
   const formatCopy = Module.FORMAT | Module.MODIFIER;
-  for (let i = 0; i < 8; i++) set(width - 1 - i, 8, formatCopy | ((formatInfo >> i) & Module.ON));
-  for (let i = 8; i < 15; i++) set(8, width - 15 + i, formatCopy | ((formatInfo >> i) & Module.ON));
+  for (let i = 0; i < 8; i++) {
+    set(width - 1 - i, 8, formatCopy | ((formatInfo >> i) & Module.ON));
+  }
+  for (let i = 8; i < 15; i++) {
+    set(8, width - 15 + i, formatCopy | ((formatInfo >> i) & Module.ON));
+  }
   set(8, width - 8, formatCopy | Module.ON);
 }
 

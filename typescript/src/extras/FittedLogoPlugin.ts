@@ -1,4 +1,12 @@
-import { FvqrError, Module, type Ecl, type Plugin, type Version } from "../fuqr.ts";
+import {
+  FuqrError,
+  Module,
+  type Details,
+  type Ecl,
+  type GenerateOptions,
+  type Plugin,
+  type Version,
+} from "../fuqr.ts";
 import { buildBlueprint } from "./blueprint.ts";
 
 export class FittedLogoPlugin implements Plugin {
@@ -19,7 +27,7 @@ export class FittedLogoPlugin implements Plugin {
     this.reserve = reserve;
   }
 
-  mutateCapacity(capacity: { version: Version; ecl: Ecl }, ctx: { maxVersion: Version }) {
+  mutateDetails(details: Details, options: Required<GenerateOptions>) {
     const fits = (version: Version, ecl: Ecl) => {
       const qrWidth = version * 4 + 17;
       const logoWidth = Math.round(this.size * qrWidth);
@@ -70,11 +78,11 @@ export class FittedLogoPlugin implements Plugin {
       return true;
     };
 
-    while (!fits(capacity.version, capacity.ecl)) {
-      if (capacity.version >= ctx.maxVersion) {
-        throw new FvqrError("LOGO_TOO_LARGE", "Logo covers too much of the QR to stay decodable");
+    while (!fits(details.version, details.ecl)) {
+      if (details.version >= options.maxVersion) {
+        throw new FuqrError("LOGO_TOO_LARGE", "Logo covers too much of the QR to stay decodable");
       }
-      capacity.version++;
+      details.version++;
     }
   }
 

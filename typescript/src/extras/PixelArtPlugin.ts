@@ -1,4 +1,5 @@
 import {
+  type Details,
   EXP_TABLE,
   generatorPolynomial,
   iterateMostlyDataModules,
@@ -9,7 +10,6 @@ import {
   NUM_DATA_BITS,
   NUM_EC_BYTES,
   type Plugin,
-  type PluginHookCtx,
   polynomialRemainder,
   visitAlignmentPatterns,
   visitTimingPatterns,
@@ -42,7 +42,7 @@ export class PixelArtPlugin implements Plugin {
   }
 
   // draw over timing and all alignment patterns except the only used (bottom right)
-  mutateMatrix(matrix: Uint8Array, { version }: Omit<PluginHookCtx, "matrix">) {
+  mutateMatrix(matrix: Uint8Array, { version }: Details) {
     const weightedStencil = this.weightedStencil;
     const width = version * 4 + 17;
     const override = (x: number, y: number) => {
@@ -60,8 +60,8 @@ export class PixelArtPlugin implements Plugin {
     });
   }
 
-  mutateMessage(messageBytes: Uint8Array, ctx: PluginHookCtx & { paddingStart: number }) {
-    const { version, ecl, mask, matrix, paddingStart } = ctx;
+  mutateMessage(messageBytes: Uint8Array, paddingStart: number, matrix: Uint8Array, details: Details) {
+    const { version, ecl, mask } = details;
     const numBytes = NUM_DATA_BITS[version] >> 3;
     const numEcBytes = NUM_EC_BYTES[version][ecl];
     const numMessageBytes = numBytes - numEcBytes;
