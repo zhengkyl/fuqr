@@ -1,0 +1,12 @@
+[package]
+name = "fuqr"
+version = "2.1.0"
+edition = "2021"
+rust-version = "1.81"
+license = "MIT"
+authors = ["Kyle Zheng <kylezheng73@gmail.com>"]
+description = "A small and hackable QR code generator"
+
+[profile.release]
+opt-level = "s"
+lto = true
