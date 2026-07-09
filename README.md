@@ -2,9 +2,9 @@
 
 A small and hackable QR code generator
 
-`/typescript` contains the main implementation with support for pixel art and fitted logos included in the extras directory.
+`typescript/` contains the main implementation with support for pixel art and fitted logos included in the extras directory.
 
-`/rust` contains a dependency-free and heap-free port of the Typescript core.
+`rust/` contains a dependency-free and heap-free port of the Typescript core.
 
 
 ## Examples
@@ -17,17 +17,17 @@ These examples are for fun. Only regular QR codes should be used for real applic
 
 The position of black and white pixels can be forced using math. See the [Pixel Art Solver](#Pixel-art-solver) section below.
 
-| `/examples/recursive`                          | `examples/horse`                       |
-| ---------------------------------------------- | -------------------------------------- |
-| ![recursive](./examples/outputs/recursive.svg) | ![horse](./examples/outputs/horse.gif) |
+| [`examples/recursive.ts`](examples/recursive.ts) | [`examples/horse.ts`](examples/horse.ts) |
+| ------------------------------------------------ | ---------------------------------------- |
+| ![recursive](./examples/outputs/recursive.svg)   | ![horse](./examples/outputs/horse.gif)   |
 
 ### Fitted Logo
 
 It's trivial to make the pixels fit around a logo, but by using the shape to exactly calculate introduced errors, the logo can be slightly bigger.
 
-| `/examples/nonsquare`                          | `examples/wordmark`                          |
-| ---------------------------------------------- | -------------------------------------------- |
-| ![nonsquare](./examples/outputs/nonsquare.png) | ![wordmark](./examples/outputs/wordmark.png) |
+| [`examples/nonsquare.ts`](examples/nonsquare.ts) | [`examples/wordmark.ts`](examples/wordmark.ts) |
+| ------------------------------------------------ | ---------------------------------------------- |
+| ![nonsquare](./examples/outputs/nonsquare.png)   | ![wordmark](./examples/outputs/wordmark.png)   |
 
 This can cover less area than the pixel art method, but this works even if the entire logo is decoded wrong, so safer for arbitrary shaped/colored designs.
 
@@ -37,9 +37,9 @@ When scanned, squares are decoded as black/white based on the image pixel(s) nea
 
 See [Halftone QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphics/Halftone_QRCodes) and [Micrography QR Codes](https://cgv.cs.nthu.edu.tw/projects/Recreational_Graphics/MQRC) for work based on this idea.
 
-| `/examples/nesting.ts`                     | `/examples/dithering.ts`                       |
-| ------------------------------------------ | ---------------------------------------------- |
-| ![nesting](./examples/outputs/nesting.svg) | ![dithering](./examples/outputs/dithering.png) |
+| [`examples/nesting.ts`](examples/nesting.ts) | [`examples/dithering.ts`](examples/dithering.ts) |
+| -------------------------------------------- | ------------------------------------------------ |
+| ![nesting](./examples/outputs/nesting.svg)   | ![dithering](./examples/outputs/dithering.png)   |
 
 Downscaling the background and applying a dithering effect looks especially good.
 
@@ -47,9 +47,9 @@ Downscaling the background and applying a dithering effect looks especially good
 
 See https://github.com/zhengkyl/qrframe for a code-based QR code designer with more designed examples.
 
-| `/examples/weave.ts`                   | `/examples/squid.ts`                   |
-| -------------------------------------- | -------------------------------------- |
-| ![weave](./examples/outputs/weave.svg) | ![squid](./examples/outputs/squid.svg) |
+| [`examples/weave.ts`](examples/weave.ts) | [`examples/squid.ts`](examples/squid.ts) |
+| ---------------------------------------- | ---------------------------------------- |
+| ![weave](./examples/outputs/weave.svg)   | ![squid](./examples/outputs/squid.svg)   |
 
 
 
