@@ -83,6 +83,7 @@ export class FittedLogoPlugin implements Plugin {
         throw new FuqrError("LOGO_TOO_LARGE", "Logo covers too much of the QR to stay decodable");
       }
       details.version++;
+      details.ecl = 3;
     }
   }
 

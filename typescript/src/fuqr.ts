@@ -43,41 +43,71 @@ export function generateWithEncoder(
 }
 
 export function renderCanvas(
-  { matrix, version }: { matrix: Uint8Array; version: Version },
+  qr: { matrix: Uint8Array; version: Version },
   options: { margin?: number; scale?: number; canvas?: HTMLCanvasElement } = {},
 ) {
   const { margin = 2, scale = 10, canvas = document.createElement("canvas") } = options;
-  const stride = version * 4 + 17;
+  const stride = qr.version * 4 + 17;
   const width = (stride + 2 * margin) * scale;
 
   canvas.width = width;
   canvas.height = width;
-
   const ctx = canvas.getContext("2d")!;
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, width, width);
 
-  ctx.fillStyle = "#000";
-  for (let y = 0; y < stride; y++) {
-    for (let x = 0; x < stride; x++) {
-      if (matrix[y * stride + x] & Module.ON) {
-        ctx.fillRect((x + margin) * scale, (y + margin) * scale, scale, scale);
-      }
-    }
-  }
+  ctx.putImageData(new ImageData(buildCanvasData(qr, margin, 9), width), 0, 0);
   return canvas;
 }
 
+export function buildCanvasData(
+  qr: { matrix: Uint8Array; version: number },
+  margin: number,
+  scale: number,
+) {
+  const stride = qr.version * 4 + 17;
+  const width = stride + 2 * margin;
+  const data = new Uint8ClampedArray(width * width * scale).fill(255);
+
+  for (let y = 0; y < stride; y++) {
+    for (let x = 0; x < stride; x++) {
+      const i = y * stride + x;
+      if (!(qr.matrix[i] & Module.ON)) continue;
+
+      for (let j = 0; j < scale; j++) {
+        for (let k = 0; k < scale; k++) {
+          const l = ((y + j) * stride + (x + k)) * 4;
+          data[l] = 0;
+          data[l + 1] = 0;
+          data[l + 2] = 0;
+        }
+      }
+    }
+  }
+  return data;
+}
+
 export function renderSvg(
-  { matrix, version }: { matrix: Uint8Array; version: Version },
+  qr: { matrix: Uint8Array; version: Version },
   options: { margin?: number; attributes?: string } = {},
 ) {
-  const {
-    margin = 2,
-    attributes = 'xmlns="http://www.w3.org/2000/svg" width="300px" height="300px"',
-  } = options;
+  const { margin = 2, attributes = 'xmlns="http://www.w3.org/2000/svg" width="300" height="300"' } =
+    options;
 
-  const stride = version * 4 + 17;
+  const stride = qr.version * 4 + 17;
+  const width = stride + 2 * margin;
+  return (
+    `<svg ${attributes.length ? attributes + " " : ""}viewBox="0 0 ${width} ${width}">` +
+    `<rect width="${width}" height="${width}" fill="#fff"/>` +
+    `<path fill="#000" d="${buildSvgPath(qr, margin, 1)}"/>` +
+    `</svg>`
+  );
+}
+
+export function buildSvgPath(
+  qr: { matrix: Uint8Array; version: number },
+  margin: number,
+  scale: number,
+) {
+  const stride = qr.version * 4 + 17;
   const edges = stride + 1;
 
   const next = new Map<number, number[]>();
@@ -103,7 +133,7 @@ export function renderSvg(
 
   for (let y = 0; y < stride; y++) {
     for (let x = 0; x < stride; x++) {
-      if ((matrix[y * stride + x] & Module.ON) === 0) continue;
+      if ((qr.matrix[y * stride + x] & Module.ON) === 0) continue;
       addEdge(x, y, x + 1, y);
       addEdge(x + 1, y, x + 1, y + 1);
       addEdge(x + 1, y + 1, x, y + 1);
@@ -115,7 +145,9 @@ export function renderSvg(
   for (const start of [...next.keys()]) {
     if (!next.has(start)) continue;
 
-    d += `M${margin + Math.floor(start / edges)},${margin + (start % edges)}`;
+    const mx = margin + Math.floor(start / edges);
+    const my = margin + (start % edges);
+    d += `M${mx * scale},${my * scale}`;
 
     let dx = 0;
     let dy = 0;
@@ -131,24 +163,17 @@ export function renderSvg(
       if (ndx === dx && ndy === dy) {
         run += ndx + ndy;
       } else {
-        if (run) d += dx !== 0 ? `h${run}` : `v${run}`;
+        if (run) d += dx !== 0 ? `h${run * scale}` : `v${run * scale}`;
         dx = ndx;
         dy = ndy;
         run = ndx + ndy;
       }
       curr = to;
     } while (curr !== start);
-    d += dx !== 0 ? `h${run}` : `v${run}`;
+    d += dx !== 0 ? `h${run * scale}` : `v${run * scale}`;
     d += "z";
   }
-
-  const width = stride + 2 * margin;
-  return (
-    `<svg ${attributes.length ? attributes + " " : ""}viewBox="0 0 ${width} ${width}">` +
-    `<rect width="${width}" height="${width}" fill="#fff"/>` +
-    `<path fill="#000" d="${d}"/>` +
-    `</svg>`
-  );
+  return d;
 }
 
 export const Module = {

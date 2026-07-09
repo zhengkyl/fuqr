@@ -3,13 +3,13 @@
   "type": "module",
   "scripts": {
     "build:ts": "pnpm -F fuqr build",
-    "build:wasm": "wasm-pack build rust/ --target nodejs --features wasm",
-    "test": "vitest run",
+    "examples": "ls examples/*.ts | xargs -I {} node {}",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"
   },
   "devDependencies": {
     "@types/node": "^25.9.2",
+    "fast-png": "^8.0.0",
     "oxfmt": "^0.52.0",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"

@@ -1,6 +1,8 @@
 # fuqr
 
-Dependency-free, heap-free `no_std` port of [`../typescript/src/fuqr.ts`](../typescript/src/fuqr.ts).
+A small and hackable QR code generator
+
+Dependency-free, heap-free `no_std` port of the Typescript rewrite of fuqr v1.
 
 ```rust
 use fuqr::{generate, render_svg_into, GenerateOptions, QrCode, SvgOptions};

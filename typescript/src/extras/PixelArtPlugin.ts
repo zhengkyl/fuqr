@@ -1,6 +1,8 @@
 import {
   type Details,
   EXP_TABLE,
+  FuqrError,
+  type GenerateOptions,
   generatorPolynomial,
   iterateMostlyDataModules,
   LOG_TABLE,
@@ -41,6 +43,28 @@ export class PixelArtPlugin implements Plugin {
     this.reservedEc = reservedEc;
   }
 
+  mutateDetails(details: Details, options: Required<GenerateOptions>): void {
+    let w = details.version * 4 + 17;
+    if (w * w > this.weightedStencil.length) {
+      throw new FuqrError("STENCIL_TOO_SMALL", "Required version exceeds stencil version");
+    }
+
+    while (w * w !== this.weightedStencil.length) {
+      if (details.version == options.maxVersion) {
+        if (w * w > this.weightedStencil.length) {
+          throw new FuqrError("STENCIL_WRONG_SIZE", "Stencil must be (4n + 17)^2 for 1<=n<=40");
+        } else {
+          throw new FuqrError("STENCIL_TOO_BIG", "Stencil version exceeds max version");
+        }
+      }
+
+      details.version += 1;
+      w += 4;
+    }
+
+    details.ecl = 0;
+  }
+
   // draw over timing and all alignment patterns except the only used (bottom right)
   mutateMatrix(matrix: Uint8Array, { version }: Details) {
     const weightedStencil = this.weightedStencil;
@@ -60,7 +84,12 @@ export class PixelArtPlugin implements Plugin {
     });
   }
 
-  mutateMessage(messageBytes: Uint8Array, paddingStart: number, matrix: Uint8Array, details: Details) {
+  mutateMessage(
+    messageBytes: Uint8Array,
+    paddingStart: number,
+    matrix: Uint8Array,
+    details: Details,
+  ) {
     const { version, ecl, mask } = details;
     const numBytes = NUM_DATA_BITS[version] >> 3;
     const numEcBytes = NUM_EC_BYTES[version][ecl];
