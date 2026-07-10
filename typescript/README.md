@@ -46,3 +46,17 @@ canvas.toBlob((blob) => {
   // etc
 }, "image/png");
 ```
+
+### Advanced
+
+For control over encoding mode, anything that implements `Encoder` can used with `generateWithEncoder()`. For convenience, `NumericEncoder`, `AlphanumericEncoder`, and `MixedEncoder` are included in `fuqr/extras/encoders`.
+
+The third argument to the generate functions is a list of plugins. A `Plugin` defines hooks that run during the generating process. For now, the `PixelArtPlugin` and `FittedLogoPlugin` are included in the extras folder, but behavior is not yet stabilized.
+
+Although everything is exported, only the `generate` and `render` prefixed functions are intended for general use. However, you may find some internal functions to be very helpful.
+
+- `buildSvgPath()` and `buildCanvasData()` provide composable rendering logic.
+
+- `buildBlueprint()` from `fuqr/extras/blueprint` can be used to find the block and bit index of every pixel. 
+
+- The `visit` helpers run a callback function with the coords of every pixel in a structural section. Looping through the data section, however, requires `iterateMostlyDataModules()` and manually skipping structural pixels. 

@@ -1,9 +1,14 @@
 {
   "name": "fuqr",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "A small and hackable QR code generator",
   "license": "MIT",
   "author": "Kyle Zheng <kylezheng73@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhengkyl/fuqr",
+    "directory": "typescript"
+  },
   "files": [
     "dist/"
   ],
