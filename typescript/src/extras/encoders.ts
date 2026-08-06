@@ -1,10 +1,14 @@
-import type { Encoder } from "../fuqr.ts";
+import { FuqrError, type Encoder } from "../fuqr.ts";
 
 export class NumericEncoder implements Encoder {
   public bytes: Uint8Array;
   constructor(content: string) {
     const bytes = new Uint8Array(content.length);
     for (let i = 0; i < content.length; i++) {
+      const byte = content.charCodeAt(i);
+      if (byte < 0x30 || 0x39 < byte) {
+        throw new FuqrError("INVALID_ENCODING", `Content is not numeric`);
+      }
       bytes[i] = content.charCodeAt(i);
     }
     this.bytes = bytes;
@@ -61,7 +65,11 @@ export class AlphanumericEncoder implements Encoder {
   constructor(content: string) {
     const bytes = new Uint8Array(content.length);
     for (let i = 0; i < content.length; i++) {
-      bytes[i] = content.charCodeAt(i);
+      const byte = content.charCodeAt(i);
+      if (AlphanumericEncoder.byteToB45(byte) === 255) {
+        throw new FuqrError("INVALID_ENCODING", `Content is not alphanumeric`);
+      }
+      bytes[i] = byte;
     }
     this.bytes = bytes;
   }
@@ -105,23 +113,14 @@ export class MixedEncoder implements Encoder {
 
     for (let i = 0; i < bytes.length; i++) {
       const byte = bytes[i];
-
       if (0x30 <= byte && byte <= 0x39) {
         modes[i] = 0;
       } else if (AlphanumericEncoder.byteToB45(byte) !== 255) {
         modes[i] = 1;
       } else {
+        // All multibyte bytes look like 1xxx_xxxx
+        // >= 0x80 and not in digit or alphanumeric range
         modes[i] = 2;
-        // multibyte
-        if (byte & 0b1100_000) {
-          i++;
-          if (byte & 0b1110_000) {
-            i++;
-            if (byte & 0b1111_000) {
-              i++;
-            }
-          }
-        }
       }
     }
     this.bytes = bytes;
@@ -140,6 +139,12 @@ export class MixedEncoder implements Encoder {
       (i: number) => (i % 2 === 0 ? 6 : 5),
       () => 8,
     ];
+
+    if (n === 0) {
+      this.segments = [{ mode: 2, start: 0, end: 0 }];
+      this.version = version;
+      return headers[2];
+    }
 
     const dp = [
       modes[0] <= 0 ? headers[0] + ithCost[0](0) : Infinity,

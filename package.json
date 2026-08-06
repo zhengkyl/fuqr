@@ -4,6 +4,7 @@
   "scripts": {
     "build:ts": "pnpm -F fuqr build",
     "examples": "ls examples/*.ts | xargs -I {} node {}",
+    "test": "vitest run",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"
   },
@@ -12,6 +13,7 @@
     "fast-png": "^8.0.0",
     "oxfmt": "^0.52.0",
     "typescript": "^5.8.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0",
+    "zxing-wasm": "^3.1.2"
   }
 }

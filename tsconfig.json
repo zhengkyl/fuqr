@@ -19,7 +19,7 @@
   },
   "include": [
     "examples/**/*.ts",
-    "tests/**/*.ts",
+    "__tests__/**/*.ts",
     "typescript/**/*.ts"
   ]
 }

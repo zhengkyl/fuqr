@@ -54,7 +54,7 @@ export function renderCanvas(
   canvas.height = width;
   const ctx = canvas.getContext("2d")!;
 
-  ctx.putImageData(new ImageData(buildCanvasData(qr, margin, 9), width), 0, 0);
+  ctx.putImageData(new ImageData(buildCanvasData(qr, margin, scale), width), 0, 0);
   return canvas;
 }
 
@@ -64,8 +64,8 @@ export function buildCanvasData(
   scale: number,
 ) {
   const stride = qr.version * 4 + 17;
-  const width = stride + 2 * margin;
-  const data = new Uint8ClampedArray(width * width * scale).fill(255);
+  const width = (stride + 2 * margin) * scale;
+  const data = new Uint8ClampedArray(width * width * 4).fill(255);
 
   for (let y = 0; y < stride; y++) {
     for (let x = 0; x < stride; x++) {
@@ -74,7 +74,7 @@ export function buildCanvasData(
 
       for (let j = 0; j < scale; j++) {
         for (let k = 0; k < scale; k++) {
-          const l = ((y + j) * stride + (x + k)) * 4;
+          const l = (((y + margin) * scale + j) * width + (x + margin) * scale + k) * 4;
           data[l] = 0;
           data[l + 1] = 0;
           data[l + 2] = 0;
