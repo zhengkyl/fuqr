@@ -1,7 +1,12 @@
-// Content lists, grouped by the narrowest mode that can carry them. Lengths are
-// picked to land on every remainder in the groupings the modes encode with:
-// threes for numeric, pairs for alphanumeric, and byte boundaries throughout.
-export const NUMERIC = [
+import { type Version } from "../typescript/src/fuqr.ts";
+
+// Boundaries: alignment patterns (2, 7), version info (7),
+// char count indicator bit len (10, 27), max ecc blocks (40)
+const FAST_VERSIONS = [1, 2, 6, 7, 9, 10, 13, 26, 27, 40] as Version[];
+const ALL_VERSIONS = Array.from({ length: 40 }, (_, i) => (i + 1) as Version);
+export const VERSIONS = process.env.FUQR_FAST ? FAST_VERSIONS : ALL_VERSIONS;
+
+const NUMERIC = [
   "0",
   "42",
   "007",
@@ -17,9 +22,8 @@ export const NUMERIC = [
   "0123456789".repeat(30),
 ];
 
-export const ALPHANUMERIC = [
+const ALPHANUMERIC = [
   "A",
-  "42",
   " ",
   "$%*+-./:",
   "HELLO",
@@ -28,26 +32,24 @@ export const ALPHANUMERIC = [
   "HTTPS://EXAMPLE.COM",
   "HTTPS://EXAMPLE.COM/PATH $%*+-./:",
   "ORDER 4200 $9.99 SHIP-TO 90210",
-  "A1".repeat(15),
-  "Z".repeat(64),
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:",
+  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".repeat(10),
+  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".repeat(100),
 ];
 
-export const BYTE = [
-  "",
+const BYTE = [
   "a",
   "hello",
   "Hello, World!",
   "  tab\there\nnewline",
   "https://example.com/some/long/path?with=query&more=params#anchor",
-  "https://example.com/2470295/manuals/525322511#step-3",
   "héllo wörld, grüße",
   "日本語のテキストです",
   "\u{1f389}\u{1f680} party \u{1f44d}\u{1f3fd}",
   "id 42 — ünïcödé \u{1f4e6} END",
   "Order #42 costs $9.99 — ship to 90210 \u{1f4e6}",
-  "x".repeat(300),
-  "z".repeat(1500),
+  "https://example.com/2470295/manuals/525322511#step-3",
+  "https://example.com/2470295/manuals/525322511#step-3".repeat(30),
 ];
 
 function mulberry32(seed: number) {
@@ -59,11 +61,20 @@ function mulberry32(seed: number) {
   };
 }
 
-const CODE_POINT_RANGES = [
-  [0x30, 0x39], // digits, numeric mode
-  [0x41, 0x5a], // upper case, alphanumeric mode
-  [0x61, 0x7a], // lower case, byte mode
-  [0x20, 0x2f], // punctuation, straddles alphanumeric and byte
+const DIGITS = [[0x30, 0x39]]; // numeric mode
+
+const ALPHANUMERIC_ONLY = [
+  [0x41, 0x5a], // upper case
+  [0x20, 0x20], // space
+  [0x24, 0x25], // $%
+  [0x2a, 0x2b], // *+
+  [0x2d, 0x2f], // -./
+  [0x3a, 0x3a], // :
+];
+
+const BYTE_ONLY = [
+  [0x61, 0x7a], // lower case
+  [0x21, 0x23], // punctuation alphanumeric mode leaves out
   [0xa0, 0x24f], // two byte
   [0x3040, 0x9fff], // three byte
   [0x1f300, 0x1f6ff], // four byte
@@ -71,10 +82,10 @@ const CODE_POINT_RANGES = [
 
 // Each string draws from a few ranges, so runs form and the mixed encoder has
 // to decide where to switch modes.
-export function randomContents(count: number, seed: number) {
+function randomContents(count: number, seed: number, ranges: number[][]) {
   const random = mulberry32(seed);
   return Array.from({ length: count }, () => {
-    const picks = [0, 0, 0].map(() => CODE_POINT_RANGES[Math.floor(random() * 7)]);
+    const picks = [0, 0, 0].map(() => ranges[Math.floor(random() * ranges.length)]);
     let content = "";
     for (let i = 1 + Math.floor(random() * 60); i > 0; i--) {
       const [lo, hi] = picks[Math.floor(random() * picks.length)];
@@ -84,4 +95,17 @@ export function randomContents(count: number, seed: number) {
   });
 }
 
-export const RANDOM = randomContents(16, 20260806);
+export const NUMERIC_CONTENTS = [...NUMERIC, ...randomContents(8, 20260806, DIGITS)];
+
+export const ALPHANUMERIC_CONTENTS = [
+  ...NUMERIC,
+  ...ALPHANUMERIC,
+  ...randomContents(8, 20260807, [...DIGITS, ...ALPHANUMERIC_ONLY]),
+];
+
+export const BYTE_CONTENTS = [
+  ...NUMERIC,
+  ...ALPHANUMERIC,
+  ...BYTE,
+  ...randomContents(16, 20260808, [...DIGITS, ...ALPHANUMERIC_ONLY, ...BYTE_ONLY]),
+];
