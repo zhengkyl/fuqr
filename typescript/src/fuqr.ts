@@ -192,6 +192,13 @@ export interface Encoder {
   encode(version: number, push: (bits: number, len: number) => void): void;
 }
 
+// Length math for a QR encoding mode, independent of how content is stored
+export interface Mode {
+  indicator: number;
+  cciLen(version: number): number;
+  segLen(len: number, version: number): number;
+}
+
 export interface Plugin {
   mutateDetails?(details: Details, options: Required<GenerateOptions>): void;
   mutateMessage?(
@@ -226,21 +233,25 @@ export class FuqrError extends Error {
 // |---------- message ----------|-- ec --|
 // |--- content ---|-- padding --|
 
+export const ByteMode: Mode = {
+  indicator: 0b0100,
+  cciLen: (version) => (version < 10 ? 8 : 16),
+  segLen: (len, version) => 4 + ByteMode.cciLen(version) + len * 8,
+};
+
 export class ByteEncoder implements Encoder {
   public bytes: Uint8Array;
   constructor(content: string) {
     this.bytes = new TextEncoder().encode(content);
   }
   bitLen(version: number) {
-    const cci = version < 10 ? 8 : 16;
-    return 4 + cci + this.bytes.length * 8;
+    return ByteMode.segLen(this.bytes.length, version);
   }
   encode(version: number, push: (bits: number, len: number) => void) {
-    const cci = version < 10 ? 8 : 16;
     const bytes = this.bytes;
 
-    push(0b0100, 4);
-    push(bytes.length, cci);
+    push(ByteMode.indicator, 4);
+    push(bytes.length, ByteMode.cciLen(version));
     for (const b of bytes) {
       push(b, 8);
     }
