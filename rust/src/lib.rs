@@ -5,6 +5,8 @@
 
 use core::fmt;
 
+pub mod encoders;
+
 /// 1 to 40 inclusive
 pub type Version = u8;
 /// 0 to 3 inclusive
@@ -223,6 +225,14 @@ pub trait Encoder {
     fn encode(&mut self, version: Version, push: &mut dyn FnMut(u16, u8));
 }
 
+/// Header and length math for a QR encoding mode, independent of how content is stored.
+pub trait Mode {
+    fn indicator(&self) -> u16;
+    fn cci_len(&self, version: Version) -> u8;
+    /// Bits for one segment of `len` chars, including its header.
+    fn seg_len(&self, len: usize, version: Version) -> usize;
+}
+
 /// Generation parameters, seeded from [`GenerateOptions`] and settled during
 /// [`determine_details`] (plugins get the last word via `mutate_details`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -264,9 +274,13 @@ pub trait Plugin {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FuqrError {
     TextTooLong {
         max_version: Version,
+    },
+    InvalidEncoding {
+        message: &'static str,
     },
     /// For custom plugins. Strings are static; keep dynamic detail as plugin state.
     Plugin {
@@ -278,6 +292,7 @@ impl FuqrError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::TextTooLong { .. } => "TEXT_TOO_LONG",
+            Self::InvalidEncoding { .. } => "INVALID_ENCODING",
             Self::Plugin { code, .. } => code,
         }
     }
@@ -288,6 +303,7 @@ impl fmt::Display for FuqrError {
             Self::TextTooLong { max_version } => {
                 write!(f, "Cannot fit in version {max_version}")
             }
+            Self::InvalidEncoding { message } => f.write_str(message),
             Self::Plugin { message, .. } => f.write_str(message),
         }
     }
@@ -307,6 +323,24 @@ impl core::error::Error for FuqrError {}
 // |---------- message ----------|-- ec --|
 // |--- content ---|-- padding --|
 
+#[derive(Debug, Clone, Copy)]
+pub struct ByteMode;
+impl Mode for ByteMode {
+    fn indicator(&self) -> u16 {
+        0b0100
+    }
+    fn cci_len(&self, version: Version) -> u8 {
+        if version < 10 {
+            8
+        } else {
+            16
+        }
+    }
+    fn seg_len(&self, len: usize, version: Version) -> usize {
+        4 + self.cci_len(version) as usize + len * 8
+    }
+}
+
 #[derive(Debug)]
 pub struct ByteEncoder<'a> {
     pub bytes: &'a [u8],
@@ -320,13 +354,11 @@ impl<'a> ByteEncoder<'a> {
 }
 impl<'a> Encoder for ByteEncoder<'a> {
     fn bit_len(&mut self, version: Version) -> usize {
-        let cci = if version < 10 { 8 } else { 16 };
-        4 + cci + self.bytes.len() * 8
+        ByteMode.seg_len(self.bytes.len(), version)
     }
     fn encode(&mut self, version: Version, push: &mut dyn FnMut(u16, u8)) {
-        let cci = if version < 10 { 8 } else { 16 };
-        push(0b0100, 4);
-        push(self.bytes.len() as u16, cci);
+        push(ByteMode.indicator(), 4);
+        push(self.bytes.len() as u16, ByteMode.cci_len(version));
         for &b in self.bytes {
             push(b as u16, 8);
         }

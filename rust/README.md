@@ -36,4 +36,14 @@ let qr = generate::<{ modules_for(13) }>(content, options, &mut [])?;
 
 ### Advanced
 
-The extra plugins and encoders from the Typescript library are not yet implemented here.
+For control over encoding mode, anything that implements `Encoder` can be used with `generate_with_encoder()`. `NumericEncoder`, `AlphanumericEncoder`, and `MixedEncoder` (shortest mix of modes) are included in `fuqr::encoders`. `ByteMode`, `NumericMode`, and `AlphanumericMode` provide each mode's header and bit lengths for custom encoders.
+
+```rust
+use fuqr::encoders::MixedEncoder;
+
+// MixedEncoder needs one scratch byte per content byte to stay heap-free
+let mut scratch = [0u8; 64];
+let qr = generate_with_encoder(&mut MixedEncoder::new(content, &mut scratch), options, &mut [])?;
+```
+
+The extra plugins from the Typescript library are not yet implemented here.
