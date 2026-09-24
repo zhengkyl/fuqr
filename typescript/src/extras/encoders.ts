@@ -45,20 +45,15 @@ export class NumericEncoder implements Encoder {
   }
 }
 
+// Alphanumeric value of each byte, or 255 if not alphanumeric
+const B45 = new Uint8Array(256).fill(255);
+for (let i = 0; i < 45; i++) {
+  B45["0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".charCodeAt(i)] = i;
+}
+
 export class AlphanumericEncoder implements Encoder {
   static byteToB45(c: number): number {
-    if (c >= 0x41 && c <= 0x5a) return c - 0x41 + 10; // A-Z
-    if (c === 0x3a) return 44; // ':'
-    if (c >= 0x30 && c <= 0x39) return c - 0x30; // 0-9
-    if (c === 0x20) return 36; // ' '
-    if (c === 0x24) return 37; // '$'
-    if (c === 0x25) return 38; // '%'
-    if (c === 0x2a) return 39; // '*'
-    if (c === 0x2b) return 40; // '+'
-    if (c === 0x2d) return 41; // '-'
-    if (c === 0x2e) return 42; // '.'
-    if (c === 0x2f) return 43; // '/'
-    return 255;
+    return c < 256 ? B45[c] : 255;
   }
 
   public bytes: Uint8Array;
@@ -66,7 +61,7 @@ export class AlphanumericEncoder implements Encoder {
     const bytes = new Uint8Array(content.length);
     for (let i = 0; i < content.length; i++) {
       const byte = content.charCodeAt(i);
-      if (AlphanumericEncoder.byteToB45(byte) === 255) {
+      if (byte > 255 || B45[byte] === 255) {
         throw new FuqrError("INVALID_ENCODING", `Content is not alphanumeric`);
       }
       bytes[i] = byte;
@@ -85,133 +80,179 @@ export class AlphanumericEncoder implements Encoder {
   encode(version: number, push: (bits: number, len: number) => void) {
     const cci = 9 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
     const bytes = this.bytes;
-    const byteToB45 = AlphanumericEncoder.byteToB45;
 
     push(0b0010, 4);
     push(bytes.length, cci);
     for (let i = 0; i < Math.floor(bytes.length / 2); i++) {
-      const group = byteToB45(bytes[i * 2]) * 45 + byteToB45(bytes[i * 2 + 1]);
-      push(group, 11);
+      push(B45[bytes[i * 2]] * 45 + B45[bytes[i * 2 + 1]], 11);
     }
     if (bytes.length & 1) {
-      push(byteToB45(bytes[bytes.length - 1]), 6);
+      push(B45[bytes[bytes.length - 1]], 6);
     }
   }
+}
+
+type Segment = { mode: number; start: number; end: number };
+
+// Cheapest mode each byte fits in: 0 numeric, 1 alphanumeric, 2 byte
+// All multibyte UTF-8 bytes look like 1xxx_xxxx, so they are always 2
+const MODE = new Uint8Array(256).fill(2);
+for (let i = 0; i < 256; i++) {
+  if (B45[i] < 10) MODE[i] = 0;
+  else if (B45[i] !== 255) MODE[i] = 1;
 }
 
 export class MixedEncoder implements Encoder {
   public bytes: Uint8Array;
   public modes: Uint8Array;
-  public segments: { mode: number; start: number; end: number }[];
+  public segments: Segment[];
   public version: number;
+  // Segmentation only depends on char count indicator lengths, so there are
+  // only 3 distinct results: versions 1-9, 10-26, 27-40
+  private cached: { bits: number; segments: Segment[] }[];
+
   constructor(content: string) {
     this.segments = [];
     this.version = 0;
+    this.cached = [];
 
     const bytes = new TextEncoder().encode(content);
     const modes = new Uint8Array(bytes.length);
-
-    for (let i = 0; i < bytes.length; i++) {
-      const byte = bytes[i];
-      if (0x30 <= byte && byte <= 0x39) {
-        modes[i] = 0;
-      } else if (AlphanumericEncoder.byteToB45(byte) !== 255) {
-        modes[i] = 1;
-      } else {
-        // All multibyte bytes look like 1xxx_xxxx
-        // >= 0x80 and not in digit or alphanumeric range
-        modes[i] = 2;
-      }
-    }
+    for (let i = 0; i < bytes.length; i++) modes[i] = MODE[bytes[i]];
     this.bytes = bytes;
     this.modes = modes;
   }
 
   bitLen(version: number): number {
+    const group = version < 10 ? 0 : version < 27 ? 1 : 2;
+    const result = (this.cached[group] ??= this.segment(version));
+    this.segments = result.segments;
+    this.version = version;
+    return result.bits;
+  }
+
+  // Shortest segmentation via dynamic programming over the cheapest cost of
+  // encoding bytes[0..=i] such that the last segment is in mode m and still open.
+  //
+  // Costs are in sixths of a bit, so every char has a fixed cost:
+  //   numeric 10/3 bits = 20, alphanumeric 11/2 bits = 33, byte 8 bits = 48
+  // A segment of length L then costs exactly ceil(cost / 6) bits once closed.
+  //
+  // Only keeping the cheapest cost per mode is optimal, because future costs
+  // are the same for any two prefixes ending in the same mode, and rounding up
+  // never makes a cheaper prefix more expensive.
+  private segment(version: number) {
     const modes = this.modes;
     const n = modes.length;
 
-    const cciDiff = (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
-    const headers = [4 + 10 + cciDiff, 4 + 9 + cciDiff, 4 + (version < 10 ? 8 : 16)];
-
-    const ithCost = [
-      (i: number) => (i % 3 === 0 ? 4 : 3),
-      (i: number) => (i % 2 === 0 ? 6 : 5),
-      () => 8,
-    ];
-
     if (n === 0) {
-      this.segments = [{ mode: 2, start: 0, end: 0 }];
-      this.version = version;
-      return headers[2];
+      return { bits: 4 + (version < 10 ? 8 : 16), segments: [{ mode: 2, start: 0, end: 0 }] };
     }
 
-    const dp = [
-      modes[0] <= 0 ? headers[0] + ithCost[0](0) : Infinity,
-      modes[0] <= 1 ? headers[1] + ithCost[1](0) : Infinity,
-      headers[2] + ithCost[2](0),
-    ];
-    const run = [modes[0] <= 0 ? 1 : 0, modes[0] <= 1 ? 1 : 0, 1];
-    const choice = new Uint8Array(n * 3);
+    const cciDiff = (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
 
-    for (let i = 1; i < n; i++) {
-      const newDp = [Infinity, Infinity, Infinity];
-      const newRun = [0, 0, 0];
-      const swapFrom = [Math.min(dp[1], dp[2]), Math.min(dp[0], dp[2]), Math.min(dp[0], dp[1])];
+    // One mode throughout is optimal as a single segment
+    let mode = modes[0];
+    let i = 1;
+    while (i < n && modes[i] === mode) i++;
+    if (i === n) {
+      const bits =
+        mode === 0
+          ? 4 + 10 + cciDiff + Math.ceil((n * 10) / 3)
+          : mode === 1
+            ? 4 + 9 + cciDiff + Math.ceil((n * 11) / 2)
+            : 4 + (version < 10 ? 8 : 16) + n * 8;
+      return { bits, segments: [{ mode, start: 0, end: n }] };
+    }
 
-      for (let m = 0; m < 3; m++) {
-        if (modes[i] > m) continue;
+    // header + first char
+    const start0 = (4 + 10 + cciDiff) * 6 + 20;
+    const start1 = (4 + 9 + cciDiff) * 6 + 33;
+    const start2 = (4 + (version < 10 ? 8 : 16)) * 6 + 48;
 
-        const stay = dp[m] + ithCost[m](run[m]);
-        const swap = swapFrom[m] + headers[m] + ithCost[m](0);
+    // prev[i] packs the mode at i - 1 for each mode at i, 2 bits per mode
+    const prev = new Uint8Array(n);
+
+    let c0 = mode === 0 ? start0 : Infinity;
+    let c1 = mode <= 1 ? start1 : Infinity;
+    let c2 = start2;
+
+    for (i = 1; i < n; i++) {
+      // Cost of closing a segment in each mode
+      const r0 = Math.ceil(c0 / 6) * 6;
+      const r1 = Math.ceil(c1 / 6) * 6;
+      const r2 = Math.ceil(c2 / 6) * 6;
+      mode = modes[i];
+      let p = 0;
+
+      // Staying wins ties to avoid pointless segments
+      // Switching to the same mode is never better than staying
+      if (mode === 0) {
+        const from = r1 <= r2 ? 1 : 2;
+        const swap = (from === 1 ? r1 : r2) + start0;
+        const stay = c0 + 20;
         if (stay <= swap) {
-          newDp[m] = stay;
-          newRun[m] = run[m] + 1;
-          choice[i * 3 + m] = m;
+          c0 = stay;
         } else {
-          newDp[m] = swap;
-          newRun[m] = 1;
-
-          if (m === 0) choice[i * 3 + m] = dp[1] <= dp[2] ? 1 : 2;
-          else if (m === 1) choice[i * 3 + m] = dp[0] <= dp[2] ? 0 : 2;
-          else choice[i * 3 + m] = dp[0] <= dp[1] ? 0 : 1;
+          c0 = swap;
+          p = from;
         }
+      } else {
+        c0 = Infinity;
       }
 
-      dp[0] = newDp[0];
-      dp[1] = newDp[1];
-      dp[2] = newDp[2];
-      run[0] = newRun[0];
-      run[1] = newRun[1];
-      run[2] = newRun[2];
+      if (mode <= 1) {
+        const from = r0 <= r2 ? 0 : 2;
+        const swap = (from === 0 ? r0 : r2) + start1;
+        const stay = c1 + 33;
+        if (stay <= swap) {
+          c1 = stay;
+          p |= 1 << 2;
+        } else {
+          c1 = swap;
+          p |= from << 2;
+        }
+      } else {
+        c1 = Infinity;
+      }
+
+      const from = r0 <= r1 ? 0 : 1;
+      const swap = (from === 0 ? r0 : r1) + start2;
+      const stay = c2 + 48;
+      if (stay <= swap) {
+        c2 = stay;
+        p |= 2 << 4;
+      } else {
+        c2 = swap;
+        p |= from << 4;
+      }
+
+      prev[i] = p;
     }
 
-    let m = dp[0] <= dp[1] ? (dp[0] <= dp[2] ? 0 : 2) : dp[1] <= dp[2] ? 1 : 2;
-    const cost = dp[m];
-    const segments: { mode: number; start: number; end: number }[] = [];
+    let m = c0 <= c1 ? (c0 <= c2 ? 0 : 2) : c1 <= c2 ? 1 : 2;
+    const bits = Math.ceil((m === 0 ? c0 : m === 1 ? c1 : c2) / 6);
+
+    const segments: Segment[] = [];
     let end = n;
     for (let i = n - 1; i >= 1; i--) {
-      const prev = choice[i * 3 + m];
-      if (prev !== m) {
+      const p = (prev[i] >> (m * 2)) & 0b11;
+      if (p !== m) {
         segments.push({ mode: m, start: i, end });
         end = i;
-        m = prev;
+        m = p;
       }
     }
     segments.push({ mode: m, start: 0, end });
     segments.reverse();
 
-    this.segments = segments;
-    this.version = version;
-
-    return cost;
+    return { bits, segments };
   }
 
   encode(version: number, push: (bits: number, len: number) => void) {
-    if (this.version !== version) this.bitLen(version);
+    this.bitLen(version);
 
     const bytes = this.bytes;
-    const byteToB45 = AlphanumericEncoder.byteToB45;
     const cciDiff = (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
 
     for (const { mode, start, end } of this.segments) {
@@ -239,9 +280,9 @@ export class MixedEncoder implements Encoder {
         const pairs = Math.floor(len / 2);
         for (let i = 0; i < pairs; i++) {
           const b = start + i * 2;
-          push(byteToB45(bytes[b]) * 45 + byteToB45(bytes[b + 1]), 11);
+          push(B45[bytes[b]] * 45 + B45[bytes[b + 1]], 11);
         }
-        if (len & 1) push(byteToB45(bytes[end - 1]), 6);
+        if (len & 1) push(B45[bytes[end - 1]], 6);
       } else {
         push(0b0100, 4);
         push(len, version < 10 ? 8 : 16);
