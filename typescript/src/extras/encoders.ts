@@ -131,16 +131,8 @@ export class MixedEncoder implements Encoder {
     return result.bits;
   }
 
-  // Shortest segmentation via dynamic programming over the cheapest cost of
-  // encoding bytes[0..=i] such that the last segment is in mode m and still open.
-  //
-  // Costs are in sixths of a bit, so every char has a fixed cost:
-  //   numeric 10/3 bits = 20, alphanumeric 11/2 bits = 33, byte 8 bits = 48
-  // A segment of length L then costs exactly ceil(cost / 6) bits once closed.
-  //
-  // Only keeping the cheapest cost per mode is optimal, because future costs
-  // are the same for any two prefixes ending in the same mode, and rounding up
-  // never makes a cheaper prefix more expensive.
+  // Costs are in sixths of a bit so each char has a fixed cost:
+  // numeric 20, alphanumeric 33, byte 48. Segments round up when closed.
   private segment(version: number) {
     const modes = this.modes;
     const n = modes.length;
