@@ -1,10 +1,11 @@
-import { type Version } from "../typescript/src/fuqr.ts";
+import { type Ecl, type Version } from "../typescript/src/fuqr.ts";
 
 // Boundaries: alignment patterns (2, 7), version info (7),
 // char count indicator bit len (10, 27), max ecc blocks (40)
 const FAST_VERSIONS = [1, 2, 6, 7, 9, 10, 13, 26, 27, 40] as Version[];
 const ALL_VERSIONS = Array.from({ length: 40 }, (_, i) => (i + 1) as Version);
 export const VERSIONS = process.env.FUQR_FAST ? FAST_VERSIONS : ALL_VERSIONS;
+export const ECLS = [0, 1, 2, 3] as Ecl[];
 
 const NUMERIC = [
   "0",

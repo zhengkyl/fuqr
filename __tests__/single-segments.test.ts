@@ -1,9 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { type Ecl, type Mask } from "../typescript/src/fuqr.ts";
-import { ALPHANUMERIC_CONTENTS, BYTE_CONTENTS, NUMERIC_CONTENTS, VERSIONS } from "./data.ts";
+import { type Mask } from "../typescript/src/fuqr.ts";
+import { ALPHANUMERIC_CONTENTS, BYTE_CONTENTS, ECLS, NUMERIC_CONTENTS, VERSIONS } from "./data.ts";
 import { compare, generateFuqr, generateNodeQrcode, type Mode } from "./generators.ts";
-
-const ECLS = [0, 1, 2, 3] as Ecl[];
 
 const GROUPS: [Mode, string[]][] = [
   ["numeric", NUMERIC_CONTENTS],
