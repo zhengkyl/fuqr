@@ -138,8 +138,6 @@ export class MixedEncoder implements Encoder {
     return result.bits;
   }
 
-  // Costs are in sixths of a bit so each char has a fixed cost:
-  // numeric 20, alphanumeric 33, byte 48. Segments round up when closed.
   private segment(version: number) {
     const modes = this.modes;
     const n = modes.length;
@@ -161,6 +159,9 @@ export class MixedEncoder implements Encoder {
         segments: [{ mode, start: 0, end: n }],
       };
     }
+
+    // Costs are in sixths of a bit
+    // numeric 20, alphanumeric 33, byte 48. Segments round up when closed.
 
     // header + first char
     const start0 = (4 + NumericMode.cciLen(version)) * 6 + 20;

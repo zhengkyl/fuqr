@@ -23,7 +23,7 @@ const svg = renderSvg(qr);
 // with options
 const svg = renderSvg(qr, {
   margin: 2,
-  attributes: 'xmlns="http://www.w3.org/2000/svg" width="300px" height="300px"'
+  attributes: 'xmlns="http://www.w3.org/2000/svg" width="300px" height="300px"',
 });
 
 // OR
@@ -57,6 +57,6 @@ Although everything is exported, only the `generate` and `render` prefixed funct
 
 - `buildSvgPath()` and `buildCanvasData()` provide composable rendering logic.
 
-- `buildBlueprint()` from `fuqr/extras/blueprint` can be used to find the block and bit index of every pixel. 
+- `buildBlueprint()` from `fuqr/extras/blueprint` can be used to find the block and bit index of every pixel.
 
-- The `visit` helpers run a callback function with the coords of every pixel in a structural section. Looping through the data section, however, requires `iterateMostlyDataModules()` and manually skipping structural pixels. 
+- The `visit` helpers run a callback function with the coords of every pixel in a structural section. Looping through the data section, however, requires `iterateMostlyDataModules()` and manually skipping structural pixels.

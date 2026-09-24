@@ -6,12 +6,11 @@ A small and hackable QR code generator
 
 `rust/` contains a dependency-free and heap-free port of the Typescript core.
 
-
 ## Examples
 
 This library only contains code to render regular QR codes, but it provides an extendable core that enables the examples below.
 
-These examples are for fun. Only regular QR codes should be used for real applications. 
+These examples are for fun. Only regular QR codes should be used for real applications.
 
 ### Pixel Art
 
@@ -51,8 +50,6 @@ See https://github.com/zhengkyl/qrframe for a code-based QR code designer with m
 | ---------------------------------------- | ---------------------------------------- |
 | ![weave](./examples/outputs/weave.svg)   | ![squid](./examples/outputs/squid.svg)   |
 
-
-
 ## Background
 
 ### Pixel art solver
@@ -64,7 +61,6 @@ It is straightforward to control the pixels corresponding to `p` padding symbols
 [QArt codes, 2012](https://research.swtch.com/qart) is a great writeup that covers much of the relevant math, although this idea was probably identified independently many times, such as in [Expansion of Image Displayable Area in Design QR Code and Its Applications, 2011](https://www.ieice.org/publications/conferences/summary.php?id=FIT0000009019&expandable=2&ConfCd=F&session_num=4V&lecture_number=O-006&year=2011&conf_type=F).
 
 Error can be introduced to place more pixels. Standard QR code decoding can correct up to `⌊r / 2⌋` incorrect symbols at unknown locations. This allows placing pixels anywhere, but since it is half as efficient as the "solve for padding" process above, this should only be used for forcing pixels corresponding to the message content or when more than `p` symbols need to be placed.
-
 
 ## Undocumented knowledge
 
