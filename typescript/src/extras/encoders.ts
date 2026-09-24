@@ -2,16 +2,16 @@ import { ByteMode, FuqrError, type Encoder, type Mode } from "../fuqr.ts";
 
 export const NumericMode: Mode = {
   indicator: 0b0001,
-  cci: (version) => 10 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
+  cciLen: (version) => 10 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
   // 10 bits per 3 digits, 4 or 7 bits for 1 or 2 leftover digits
-  bitLen: (len, version) => 4 + NumericMode.cci(version) + Math.ceil((len * 10) / 3),
+  segLen: (len, version) => 4 + NumericMode.cciLen(version) + Math.ceil((len * 10) / 3),
 };
 
 export const AlphanumericMode: Mode = {
   indicator: 0b0010,
-  cci: (version) => 9 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
+  cciLen: (version) => 9 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
   // 11 bits per 2 chars, 6 bits for 1 leftover char
-  bitLen: (len, version) => 4 + AlphanumericMode.cci(version) + Math.ceil((len * 11) / 2),
+  segLen: (len, version) => 4 + AlphanumericMode.cciLen(version) + Math.ceil((len * 11) / 2),
 };
 
 export class NumericEncoder implements Encoder {
@@ -29,14 +29,14 @@ export class NumericEncoder implements Encoder {
   }
 
   bitLen(version: number) {
-    return NumericMode.bitLen(this.bytes.length, version);
+    return NumericMode.segLen(this.bytes.length, version);
   }
 
   encode(version: number, push: (bits: number, len: number) => void) {
     const bytes = this.bytes;
 
     push(NumericMode.indicator, 4);
-    push(bytes.length, NumericMode.cci(version));
+    push(bytes.length, NumericMode.cciLen(version));
     const groups = Math.floor(bytes.length / 3);
     for (let i = 0; i < groups; i++) {
       const group =
@@ -79,14 +79,14 @@ export class AlphanumericEncoder implements Encoder {
   }
 
   bitLen(version: number) {
-    return AlphanumericMode.bitLen(this.bytes.length, version);
+    return AlphanumericMode.segLen(this.bytes.length, version);
   }
 
   encode(version: number, push: (bits: number, len: number) => void) {
     const bytes = this.bytes;
 
     push(AlphanumericMode.indicator, 4);
-    push(bytes.length, AlphanumericMode.cci(version));
+    push(bytes.length, AlphanumericMode.cciLen(version));
     for (let i = 0; i < Math.floor(bytes.length / 2); i++) {
       push(B45[bytes[i * 2]] * 45 + B45[bytes[i * 2 + 1]], 11);
     }
@@ -146,7 +146,7 @@ export class MixedEncoder implements Encoder {
 
     if (n === 0) {
       return {
-        bits: ByteMode.bitLen(0, version),
+        bits: ByteMode.segLen(0, version),
         segments: [{ mode: 2, start: 0, end: 0 }],
       };
     }
@@ -157,15 +157,15 @@ export class MixedEncoder implements Encoder {
     while (i < n && modes[i] === mode) i++;
     if (i === n) {
       return {
-        bits: MODES[mode].bitLen(n, version),
+        bits: MODES[mode].segLen(n, version),
         segments: [{ mode, start: 0, end: n }],
       };
     }
 
     // header + first char
-    const start0 = (4 + NumericMode.cci(version)) * 6 + 20;
-    const start1 = (4 + AlphanumericMode.cci(version)) * 6 + 33;
-    const start2 = (4 + ByteMode.cci(version)) * 6 + 48;
+    const start0 = (4 + NumericMode.cciLen(version)) * 6 + 20;
+    const start1 = (4 + AlphanumericMode.cciLen(version)) * 6 + 33;
+    const start2 = (4 + ByteMode.cciLen(version)) * 6 + 48;
 
     // prev[i] packs the mode at i - 1 for each mode at i, 2 bits per mode
     const prev = new Uint8Array(n);
@@ -252,7 +252,7 @@ export class MixedEncoder implements Encoder {
     const bytes = this.bytes;
     for (const { mode, start, end } of this.segments) {
       push(MODES[mode].indicator, 4);
-      push(end - start, MODES[mode].cci(version));
+      push(end - start, MODES[mode].cciLen(version));
 
       if (mode === 0) {
         let i = start;
