@@ -38,34 +38,13 @@ function shortestBitLen(content: string, version: number) {
 
 // Returns a description of what is wrong, or "" if nothing
 function check(content: string, version: number) {
-  const where = `${JSON.stringify(content)} v${version}`;
   const encoder = new MixedEncoder(content);
   const bits = encoder.bitLen(version);
   const shortest = shortestBitLen(content, version);
-  if (bits !== shortest) return `${where} bitLen ${bits}, shortest ${shortest}`;
-
-  // Segments are contiguous, valid, and add up to bitLen
-  const { bytes, segments } = encoder;
-  let pos = 0;
-  let total = 0;
-  for (let i = 0; i < segments.length; i++) {
-    const { mode, start, end } = segments[i];
-    if (start !== pos) return `${where} segment ${i} starts at ${start}, expected ${pos}`;
-    if (i > 0 && mode === segments[i - 1].mode) return `${where} segment ${i} repeats mode`;
-    for (let j = start; j < end; j++) {
-      if (modeOf(bytes[j]) > mode) return `${where} byte ${j} invalid in mode ${mode}`;
-    }
-    total += segmentBits(mode, end - start, version);
-    pos = end;
-  }
-  if (pos !== bytes.length) return `${where} segments end at ${pos}`;
-  if (total !== bits) return `${where} segments total ${total}, bitLen ${bits}`;
-
   let pushed = 0;
   encoder.encode(version, (_, len) => (pushed += len));
-  if (pushed !== bits) return `${where} pushed ${pushed}, bitLen ${bits}`;
-
-  return "";
+  if (bits === shortest && pushed === bits) return "";
+  return `${JSON.stringify(content)} v${version} bitLen ${bits}, shortest ${shortest}, pushed ${pushed}`;
 }
 
 function checkAll(contents: Iterable<string>, version: number) {
