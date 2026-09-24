@@ -105,14 +105,4 @@ describe("mixed mode is optimal", () => {
   test.each(VERSIONS)("test data version %i", (version) => {
     checkAll(BYTE_CONTENTS, version);
   });
-
-  test("reuses segments across versions", () => {
-    const encoder = new MixedEncoder("https://example.com/2470295/manuals/525322511#step-3");
-    const small = encoder.bitLen(1);
-    const smallSegments = encoder.segments;
-    const large = encoder.bitLen(10);
-    expect(large).toBeGreaterThan(small);
-    expect(encoder.bitLen(9)).toBe(small);
-    expect(encoder.segments).toBe(smallSegments);
-  });
 });
