@@ -1,67 +1,31 @@
 import { ByteMode, FuqrError, type Encoder, type Mode } from "../fuqr.ts";
 
 export const NumericMode: Mode = {
-  accepts: (byte) => 0x30 <= byte && byte <= 0x39,
+  indicator: 0b0001,
   cci: (version) => 10 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
   // 10 bits per 3 digits, 4 or 7 bits for 1 or 2 leftover digits
   bitLen: (len, version) => 4 + NumericMode.cci(version) + Math.ceil((len * 10) / 3),
-  encode(bytes, start, end, version, push) {
-    push(0b0001, 4);
-    push(end - start, NumericMode.cci(version));
-    let i = start;
-    for (; i + 3 <= end; i += 3) {
-      push((bytes[i] - 0x30) * 100 + (bytes[i + 1] - 0x30) * 10 + (bytes[i + 2] - 0x30), 10);
-    }
-    switch (end - i) {
-      case 1:
-        push(bytes[i] - 0x30, 4);
-        break;
-      case 2:
-        push((bytes[i] - 0x30) * 10 + (bytes[i + 1] - 0x30), 7);
-        break;
-    }
-  },
 };
 
-// Alphanumeric value of each byte, or 255 if not alphanumeric
-const B45 = new Uint8Array(256).fill(255);
-for (let i = 0; i < 45; i++) {
-  B45["0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".charCodeAt(i)] = i;
-}
-
 export const AlphanumericMode: Mode = {
-  accepts: (byte) => byte < 256 && B45[byte] !== 255,
+  indicator: 0b0010,
   cci: (version) => 9 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
   // 11 bits per 2 chars, 6 bits for 1 leftover char
   bitLen: (len, version) => 4 + AlphanumericMode.cci(version) + Math.ceil((len * 11) / 2),
-  encode(bytes, start, end, version, push) {
-    push(0b0010, 4);
-    push(end - start, AlphanumericMode.cci(version));
-    let i = start;
-    for (; i + 2 <= end; i += 2) {
-      push(B45[bytes[i]] * 45 + B45[bytes[i + 1]], 11);
-    }
-    if (i < end) push(B45[bytes[i]], 6);
-  },
 };
-
-// Content is stored as char codes, which match UTF-8 bytes for valid content
-function charCodes(content: string, mode: Mode, name: string) {
-  const bytes = new Uint8Array(content.length);
-  for (let i = 0; i < content.length; i++) {
-    const byte = content.charCodeAt(i);
-    if (!mode.accepts(byte)) {
-      throw new FuqrError("INVALID_ENCODING", `Content is not ${name}`);
-    }
-    bytes[i] = byte;
-  }
-  return bytes;
-}
 
 export class NumericEncoder implements Encoder {
   public bytes: Uint8Array;
   constructor(content: string) {
-    this.bytes = charCodes(content, NumericMode, "numeric");
+    const bytes = new Uint8Array(content.length);
+    for (let i = 0; i < content.length; i++) {
+      const byte = content.charCodeAt(i);
+      if (byte < 0x30 || 0x39 < byte) {
+        throw new FuqrError("INVALID_ENCODING", `Content is not numeric`);
+      }
+      bytes[i] = byte;
+    }
+    this.bytes = bytes;
   }
 
   bitLen(version: number) {
@@ -69,8 +33,31 @@ export class NumericEncoder implements Encoder {
   }
 
   encode(version: number, push: (bits: number, len: number) => void) {
-    NumericMode.encode(this.bytes, 0, this.bytes.length, version, push);
+    const bytes = this.bytes;
+
+    push(NumericMode.indicator, 4);
+    push(bytes.length, NumericMode.cci(version));
+    const groups = Math.floor(bytes.length / 3);
+    for (let i = 0; i < groups; i++) {
+      const group =
+        (bytes[i * 3] - 0x30) * 100 + (bytes[i * 3 + 1] - 0x30) * 10 + (bytes[i * 3 + 2] - 0x30);
+      push(group, 10);
+    }
+    switch (bytes.length % 3) {
+      case 1:
+        push(bytes[bytes.length - 1] - 0x30, 4);
+        break;
+      case 2:
+        push((bytes[bytes.length - 2] - 0x30) * 10 + (bytes[bytes.length - 1] - 0x30), 7);
+        break;
+    }
   }
+}
+
+// Alphanumeric value of each byte, or 255 if not alphanumeric
+const B45 = new Uint8Array(256).fill(255);
+for (let i = 0; i < 45; i++) {
+  B45["0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".charCodeAt(i)] = i;
 }
 
 export class AlphanumericEncoder implements Encoder {
@@ -80,7 +67,15 @@ export class AlphanumericEncoder implements Encoder {
 
   public bytes: Uint8Array;
   constructor(content: string) {
-    this.bytes = charCodes(content, AlphanumericMode, "alphanumeric");
+    const bytes = new Uint8Array(content.length);
+    for (let i = 0; i < content.length; i++) {
+      const byte = content.charCodeAt(i);
+      if (byte > 255 || B45[byte] === 255) {
+        throw new FuqrError("INVALID_ENCODING", `Content is not alphanumeric`);
+      }
+      bytes[i] = byte;
+    }
+    this.bytes = bytes;
   }
 
   bitLen(version: number) {
@@ -88,38 +83,15 @@ export class AlphanumericEncoder implements Encoder {
   }
 
   encode(version: number, push: (bits: number, len: number) => void) {
-    AlphanumericMode.encode(this.bytes, 0, this.bytes.length, version, push);
-  }
-}
+    const bytes = this.bytes;
 
-// Encodes bytes as the given segments, which should cover every byte in order
-export class SegmentEncoder implements Encoder {
-  public bytes: Uint8Array;
-  public segments: { mode: Mode; start: number; end: number }[];
-  constructor(bytes: Uint8Array, segments: { mode: Mode; start: number; end: number }[]) {
-    for (const { mode, start, end } of segments) {
-      if (start < 0 || end < start || bytes.length < end) {
-        throw new FuqrError("INVALID_ENCODING", `Segment ${start}..${end} is out of bounds`);
-      }
-      for (let i = start; i < end; i++) {
-        if (!mode.accepts(bytes[i])) {
-          throw new FuqrError("INVALID_ENCODING", `Byte ${i} is not valid in its segment`);
-        }
-      }
+    push(AlphanumericMode.indicator, 4);
+    push(bytes.length, AlphanumericMode.cci(version));
+    for (let i = 0; i < Math.floor(bytes.length / 2); i++) {
+      push(B45[bytes[i * 2]] * 45 + B45[bytes[i * 2 + 1]], 11);
     }
-    this.bytes = bytes;
-    this.segments = segments;
-  }
-
-  bitLen(version: number) {
-    let bits = 0;
-    for (const { mode, start, end } of this.segments) bits += mode.bitLen(end - start, version);
-    return bits;
-  }
-
-  encode(version: number, push: (bits: number, len: number) => void) {
-    for (const { mode, start, end } of this.segments) {
-      mode.encode(this.bytes, start, end, version, push);
+    if (bytes.length & 1) {
+      push(B45[bytes[bytes.length - 1]], 6);
     }
   }
 }
@@ -131,9 +103,10 @@ const MODES = [NumericMode, AlphanumericMode, ByteMode];
 
 // Cheapest mode each byte fits in: 0 numeric, 1 alphanumeric, 2 byte
 // All multibyte UTF-8 bytes look like 1xxx_xxxx, so they are always 2
-const MODE = new Uint8Array(256);
+const MODE = new Uint8Array(256).fill(2);
 for (let i = 0; i < 256; i++) {
-  MODE[i] = NumericMode.accepts(i) ? 0 : AlphanumericMode.accepts(i) ? 1 : 2;
+  if (B45[i] < 10) MODE[i] = 0;
+  else if (B45[i] !== 255) MODE[i] = 1;
 }
 
 export class MixedEncoder implements Encoder {
@@ -275,8 +248,34 @@ export class MixedEncoder implements Encoder {
 
   encode(version: number, push: (bits: number, len: number) => void) {
     this.bitLen(version);
+
+    const bytes = this.bytes;
     for (const { mode, start, end } of this.segments) {
-      MODES[mode].encode(this.bytes, start, end, version, push);
+      push(MODES[mode].indicator, 4);
+      push(end - start, MODES[mode].cci(version));
+
+      if (mode === 0) {
+        let i = start;
+        for (; i + 3 <= end; i += 3) {
+          push((bytes[i] - 0x30) * 100 + (bytes[i + 1] - 0x30) * 10 + (bytes[i + 2] - 0x30), 10);
+        }
+        switch (end - i) {
+          case 1:
+            push(bytes[i] - 0x30, 4);
+            break;
+          case 2:
+            push((bytes[i] - 0x30) * 10 + (bytes[i + 1] - 0x30), 7);
+            break;
+        }
+      } else if (mode === 1) {
+        let i = start;
+        for (; i + 2 <= end; i += 2) {
+          push(B45[bytes[i]] * 45 + B45[bytes[i + 1]], 11);
+        }
+        if (i < end) push(B45[bytes[i]], 6);
+      } else {
+        for (let i = start; i < end; i++) push(bytes[i], 8);
+      }
     }
   }
 }

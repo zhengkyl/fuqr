@@ -192,18 +192,11 @@ export interface Encoder {
   encode(version: number, push: (bits: number, len: number) => void): void;
 }
 
-// A QR encoding mode, used to encode one segment of bytes
+// Length math for a QR encoding mode, independent of how content is stored
 export interface Mode {
-  accepts(byte: number): boolean;
+  indicator: number;
   cci(version: number): number;
   bitLen(len: number, version: number): number;
-  encode(
-    bytes: Uint8Array,
-    start: number,
-    end: number,
-    version: number,
-    push: (bits: number, len: number) => void,
-  ): void;
 }
 
 export interface Plugin {
@@ -241,16 +234,9 @@ export class FuqrError extends Error {
 // |--- content ---|-- padding --|
 
 export const ByteMode: Mode = {
-  accepts: () => true,
+  indicator: 0b0100,
   cci: (version) => (version < 10 ? 8 : 16),
   bitLen: (len, version) => 4 + ByteMode.cci(version) + len * 8,
-  encode(bytes, start, end, version, push) {
-    push(0b0100, 4);
-    push(end - start, ByteMode.cci(version));
-    for (let i = start; i < end; i++) {
-      push(bytes[i], 8);
-    }
-  },
 };
 
 export class ByteEncoder implements Encoder {
@@ -262,7 +248,13 @@ export class ByteEncoder implements Encoder {
     return ByteMode.bitLen(this.bytes.length, version);
   }
   encode(version: number, push: (bits: number, len: number) => void) {
-    ByteMode.encode(this.bytes, 0, this.bytes.length, version, push);
+    const bytes = this.bytes;
+
+    push(ByteMode.indicator, 4);
+    push(bytes.length, ByteMode.cci(version));
+    for (const b of bytes) {
+      push(b, 8);
+    }
   }
 }
 
