@@ -49,7 +49,7 @@ canvas.toBlob((blob) => {
 
 ### Advanced
 
-For control over encoding mode, anything that implements `Encoder` can used with `generateWithEncoder()`. For convenience, `NumericEncoder`, `AlphanumericEncoder`, and `MixedEncoder` are included in `fuqr/extras/encoders`.
+For control over encoding mode, anything that implements `Encoder` can be used with `generateWithEncoder()`. For convenience, `NumericEncoder`, `AlphanumericEncoder`, `MixedEncoder` (shortest mix of modes), and `SegmentEncoder` (your own mix of modes) are included in `fuqr/extras/encoders`. Each mode (`ByteMode`, `NumericMode`, `AlphanumericMode`) can also encode a single segment for custom encoders.
 
 The third argument to the generate functions is a list of plugins. A `Plugin` defines hooks that run during the generating process. For now, the `PixelArtPlugin` and `FittedLogoPlugin` are included in the extras folder, but behavior is not yet stabilized.
 

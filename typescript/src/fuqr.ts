@@ -192,6 +192,20 @@ export interface Encoder {
   encode(version: number, push: (bits: number, len: number) => void): void;
 }
 
+// A QR encoding mode, used to encode one segment of bytes
+export interface Mode {
+  accepts(byte: number): boolean;
+  cci(version: number): number;
+  bitLen(len: number, version: number): number;
+  encode(
+    bytes: Uint8Array,
+    start: number,
+    end: number,
+    version: number,
+    push: (bits: number, len: number) => void,
+  ): void;
+}
+
 export interface Plugin {
   mutateDetails?(details: Details, options: Required<GenerateOptions>): void;
   mutateMessage?(
@@ -226,36 +240,29 @@ export class FuqrError extends Error {
 // |---------- message ----------|-- ec --|
 // |--- content ---|-- padding --|
 
-export class ByteEncoder implements Encoder {
-  static cci(version: number) {
-    return version < 10 ? 8 : 16;
-  }
-  static segmentBitLen(len: number, version: number) {
-    return 4 + ByteEncoder.cci(version) + len * 8;
-  }
-  static encodeSegment(
-    bytes: Uint8Array,
-    start: number,
-    end: number,
-    version: number,
-    push: (bits: number, len: number) => void,
-  ) {
+export const ByteMode: Mode = {
+  accepts: () => true,
+  cci: (version) => (version < 10 ? 8 : 16),
+  bitLen: (len, version) => 4 + ByteMode.cci(version) + len * 8,
+  encode(bytes, start, end, version, push) {
     push(0b0100, 4);
-    push(end - start, ByteEncoder.cci(version));
+    push(end - start, ByteMode.cci(version));
     for (let i = start; i < end; i++) {
       push(bytes[i], 8);
     }
-  }
+  },
+};
 
+export class ByteEncoder implements Encoder {
   public bytes: Uint8Array;
   constructor(content: string) {
     this.bytes = new TextEncoder().encode(content);
   }
   bitLen(version: number) {
-    return ByteEncoder.segmentBitLen(this.bytes.length, version);
+    return ByteMode.bitLen(this.bytes.length, version);
   }
   encode(version: number, push: (bits: number, len: number) => void) {
-    ByteEncoder.encodeSegment(this.bytes, 0, this.bytes.length, version, push);
+    ByteMode.encode(this.bytes, 0, this.bytes.length, version, push);
   }
 }
 
