@@ -1,6 +1,36 @@
-import { FuqrError, type Encoder } from "../fuqr.ts";
+import { ByteEncoder, FuqrError, type Encoder } from "../fuqr.ts";
 
 export class NumericEncoder implements Encoder {
+  static cci(version: number) {
+    return 10 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
+  }
+  static segmentBitLen(len: number, version: number) {
+    // 10 bits per 3 digits, 4 or 7 bits for 1 or 2 leftover digits
+    return 4 + NumericEncoder.cci(version) + Math.ceil((len * 10) / 3);
+  }
+  static encodeSegment(
+    bytes: Uint8Array,
+    start: number,
+    end: number,
+    version: number,
+    push: (bits: number, len: number) => void,
+  ) {
+    push(0b0001, 4);
+    push(end - start, NumericEncoder.cci(version));
+    let i = start;
+    for (; i + 3 <= end; i += 3) {
+      push((bytes[i] - 0x30) * 100 + (bytes[i + 1] - 0x30) * 10 + (bytes[i + 2] - 0x30), 10);
+    }
+    switch (end - i) {
+      case 1:
+        push(bytes[i] - 0x30, 4);
+        break;
+      case 2:
+        push((bytes[i] - 0x30) * 10 + (bytes[i + 1] - 0x30), 7);
+        break;
+    }
+  }
+
   public bytes: Uint8Array;
   constructor(content: string) {
     const bytes = new Uint8Array(content.length);
@@ -15,33 +45,11 @@ export class NumericEncoder implements Encoder {
   }
 
   bitLen(version: number) {
-    const cci = 10 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
-    const byteLen = this.bytes.length;
-    const full = Math.floor(byteLen / 3) * 10;
-    const remainder = Math.ceil((byteLen % 3) * 3.5);
-    return 4 + cci + full + remainder;
+    return NumericEncoder.segmentBitLen(this.bytes.length, version);
   }
 
   encode(version: number, push: (bits: number, len: number) => void) {
-    const cci = 10 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
-    const bytes = this.bytes;
-
-    push(0b0001, 4);
-    push(bytes.length, cci);
-    const groups = Math.floor(bytes.length / 3);
-    for (let i = 0; i < groups; i++) {
-      const group =
-        (bytes[i * 3] - 0x30) * 100 + (bytes[i * 3 + 1] - 0x30) * 10 + (bytes[i * 3 + 2] - 0x30);
-      push(group, 10);
-    }
-    switch (bytes.length % 3) {
-      case 1:
-        push(bytes[bytes.length - 1] - 0x30, 4);
-        break;
-      case 2:
-        push((bytes[bytes.length - 2] - 0x30) * 10 + (bytes[bytes.length - 1] - 0x30), 7);
-        break;
-    }
+    NumericEncoder.encodeSegment(this.bytes, 0, this.bytes.length, version, push);
   }
 }
 
@@ -54,6 +62,28 @@ for (let i = 0; i < 45; i++) {
 export class AlphanumericEncoder implements Encoder {
   static byteToB45(c: number): number {
     return c < 256 ? B45[c] : 255;
+  }
+  static cci(version: number) {
+    return 9 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
+  }
+  static segmentBitLen(len: number, version: number) {
+    // 11 bits per 2 chars, 6 bits for 1 leftover char
+    return 4 + AlphanumericEncoder.cci(version) + Math.ceil((len * 11) / 2);
+  }
+  static encodeSegment(
+    bytes: Uint8Array,
+    start: number,
+    end: number,
+    version: number,
+    push: (bits: number, len: number) => void,
+  ) {
+    push(0b0010, 4);
+    push(end - start, AlphanumericEncoder.cci(version));
+    let i = start;
+    for (; i + 2 <= end; i += 2) {
+      push(B45[bytes[i]] * 45 + B45[bytes[i + 1]], 11);
+    }
+    if (i < end) push(B45[bytes[i]], 6);
   }
 
   public bytes: Uint8Array;
@@ -70,29 +100,18 @@ export class AlphanumericEncoder implements Encoder {
   }
 
   bitLen(version: number) {
-    const cci = 9 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
-    const byteLen = this.bytes.length;
-    const full = Math.floor(byteLen / 2) * 11;
-    const remainder = (byteLen % 2) * 6;
-    return 4 + cci + full + remainder;
+    return AlphanumericEncoder.segmentBitLen(this.bytes.length, version);
   }
 
   encode(version: number, push: (bits: number, len: number) => void) {
-    const cci = 9 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
-    const bytes = this.bytes;
-
-    push(0b0010, 4);
-    push(bytes.length, cci);
-    for (let i = 0; i < Math.floor(bytes.length / 2); i++) {
-      push(B45[bytes[i * 2]] * 45 + B45[bytes[i * 2 + 1]], 11);
-    }
-    if (bytes.length & 1) {
-      push(B45[bytes[bytes.length - 1]], 6);
-    }
+    AlphanumericEncoder.encodeSegment(this.bytes, 0, this.bytes.length, version, push);
   }
 }
 
 type Segment = { mode: number; start: number; end: number };
+
+// Indexed by segment mode
+const ENCODERS = [NumericEncoder, AlphanumericEncoder, ByteEncoder];
 
 // Cheapest mode each byte fits in: 0 numeric, 1 alphanumeric, 2 byte
 // All multibyte UTF-8 bytes look like 1xxx_xxxx, so they are always 2
@@ -138,29 +157,27 @@ export class MixedEncoder implements Encoder {
     const n = modes.length;
 
     if (n === 0) {
-      return { bits: 4 + (version < 10 ? 8 : 16), segments: [{ mode: 2, start: 0, end: 0 }] };
+      return {
+        bits: ByteEncoder.segmentBitLen(0, version),
+        segments: [{ mode: 2, start: 0, end: 0 }],
+      };
     }
-
-    const cciDiff = (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
 
     // One mode throughout is optimal as a single segment
     let mode = modes[0];
     let i = 1;
     while (i < n && modes[i] === mode) i++;
     if (i === n) {
-      const bits =
-        mode === 0
-          ? 4 + 10 + cciDiff + Math.ceil((n * 10) / 3)
-          : mode === 1
-            ? 4 + 9 + cciDiff + Math.ceil((n * 11) / 2)
-            : 4 + (version < 10 ? 8 : 16) + n * 8;
-      return { bits, segments: [{ mode, start: 0, end: n }] };
+      return {
+        bits: ENCODERS[mode].segmentBitLen(n, version),
+        segments: [{ mode, start: 0, end: n }],
+      };
     }
 
     // header + first char
-    const start0 = (4 + 10 + cciDiff) * 6 + 20;
-    const start1 = (4 + 9 + cciDiff) * 6 + 33;
-    const start2 = (4 + (version < 10 ? 8 : 16)) * 6 + 48;
+    const start0 = (4 + NumericEncoder.cci(version)) * 6 + 20;
+    const start1 = (4 + AlphanumericEncoder.cci(version)) * 6 + 33;
+    const start2 = (4 + ByteEncoder.cci(version)) * 6 + 48;
 
     // prev[i] packs the mode at i - 1 for each mode at i, 2 bits per mode
     const prev = new Uint8Array(n);
@@ -243,43 +260,8 @@ export class MixedEncoder implements Encoder {
 
   encode(version: number, push: (bits: number, len: number) => void) {
     this.bitLen(version);
-
-    const bytes = this.bytes;
-    const cciDiff = (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0);
-
     for (const { mode, start, end } of this.segments) {
-      const len = end - start;
-
-      if (mode === 0) {
-        push(0b0001, 4);
-        push(len, 10 + cciDiff);
-        const groups = Math.floor(len / 3);
-        for (let i = 0; i < groups; i++) {
-          const b = start + i * 3;
-          push((bytes[b] - 0x30) * 100 + (bytes[b + 1] - 0x30) * 10 + (bytes[b + 2] - 0x30), 10);
-        }
-        switch (len % 3) {
-          case 1:
-            push(bytes[end - 1] - 0x30, 4);
-            break;
-          case 2:
-            push((bytes[end - 2] - 0x30) * 10 + (bytes[end - 1] - 0x30), 7);
-            break;
-        }
-      } else if (mode === 1) {
-        push(0b0010, 4);
-        push(len, 9 + cciDiff);
-        const pairs = Math.floor(len / 2);
-        for (let i = 0; i < pairs; i++) {
-          const b = start + i * 2;
-          push(B45[bytes[b]] * 45 + B45[bytes[b + 1]], 11);
-        }
-        if (len & 1) push(B45[bytes[end - 1]], 6);
-      } else {
-        push(0b0100, 4);
-        push(len, version < 10 ? 8 : 16);
-        for (let i = start; i < end; i++) push(bytes[i], 8);
-      }
+      ENCODERS[mode].encodeSegment(this.bytes, start, end, version, push);
     }
   }
 }

@@ -227,23 +227,35 @@ export class FuqrError extends Error {
 // |--- content ---|-- padding --|
 
 export class ByteEncoder implements Encoder {
+  static cci(version: number) {
+    return version < 10 ? 8 : 16;
+  }
+  static segmentBitLen(len: number, version: number) {
+    return 4 + ByteEncoder.cci(version) + len * 8;
+  }
+  static encodeSegment(
+    bytes: Uint8Array,
+    start: number,
+    end: number,
+    version: number,
+    push: (bits: number, len: number) => void,
+  ) {
+    push(0b0100, 4);
+    push(end - start, ByteEncoder.cci(version));
+    for (let i = start; i < end; i++) {
+      push(bytes[i], 8);
+    }
+  }
+
   public bytes: Uint8Array;
   constructor(content: string) {
     this.bytes = new TextEncoder().encode(content);
   }
   bitLen(version: number) {
-    const cci = version < 10 ? 8 : 16;
-    return 4 + cci + this.bytes.length * 8;
+    return ByteEncoder.segmentBitLen(this.bytes.length, version);
   }
   encode(version: number, push: (bits: number, len: number) => void) {
-    const cci = version < 10 ? 8 : 16;
-    const bytes = this.bytes;
-
-    push(0b0100, 4);
-    push(bytes.length, cci);
-    for (const b of bytes) {
-      push(b, 8);
-    }
+    ByteEncoder.encodeSegment(this.bytes, 0, this.bytes.length, version, push);
   }
 }
 
