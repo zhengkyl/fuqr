@@ -36,10 +36,17 @@ let qr = generate::<{ modules_for(13) }>(content, options, &mut [])?;
 
 ### Advanced
 
-For control over encoding mode, anything that implements `Encoder` can be used with `generate_with_encoder()`. `NumericEncoder`, `AlphanumericEncoder`, and `MixedEncoder` (shortest mix of modes) are included in `fuqr::encoders`. `ByteMode`, `NumericMode`, and `AlphanumericMode` provide each mode's header and bit lengths for custom encoders.
+For control over encoding mode, anything that implements `Encoder` can be used with `generate_with_encoder()`. `NumericEncoder`, `AlphanumericEncoder`, and `MixedEncoder` (shortest mix of modes) are included in `fuqr::extras::encoders`. `ByteMode`, `NumericMode`, and `AlphanumericMode` provide each mode's header and bit lengths for custom encoders.
+
+`fuqr::extras` requires the `extras` feature.
+
+```toml
+[dependencies]
+fuqr = { version = "2", features = ["extras"] }
+```
 
 ```rust
-use fuqr::encoders::MixedEncoder;
+use fuqr::extras::encoders::MixedEncoder;
 
 // MixedEncoder needs one scratch byte per content byte to stay heap-free
 let mut scratch = [0u8; 64];

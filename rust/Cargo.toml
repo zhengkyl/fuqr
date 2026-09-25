@@ -11,3 +11,9 @@ repository = "https://github.com/zhengkyl/fuqr/tree/main/rust"
 [profile.release]
 opt-level = "s"
 lto = true
+
+[features]
+extras = []
+
+[dev-dependencies]
+fuqr = { path = ".", features = ["extras"] }

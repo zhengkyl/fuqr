@@ -1,9 +1,5 @@
 use crate::{ByteMode, Encoder, FuqrError, Mode, Version};
 
-const fn cci_diff(version: Version) -> u8 {
-    (version > 9) as u8 * 2 + (version > 26) as u8 * 2
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct NumericMode;
 impl Mode for NumericMode {
@@ -11,7 +7,7 @@ impl Mode for NumericMode {
         0b0001
     }
     fn cci_len(&self, version: Version) -> u8 {
-        10 + cci_diff(version)
+        10 + (version > 9) as u8 * 2 + (version > 26) as u8 * 2
     }
     // 10 bits per 3 digits, 4 or 7 bits for 1 or 2 leftover digits
     fn seg_len(&self, len: usize, version: Version) -> usize {
@@ -26,7 +22,7 @@ impl Mode for AlphanumericMode {
         0b0010
     }
     fn cci_len(&self, version: Version) -> u8 {
-        9 + cci_diff(version)
+        9 + (version > 9) as u8 * 2 + (version > 26) as u8 * 2
     }
     // 11 bits per 2 chars, 6 bits for 1 leftover char
     fn seg_len(&self, len: usize, version: Version) -> usize {
@@ -141,19 +137,6 @@ const MODE: [u8; 256] = {
     table
 };
 
-fn seg_len(mode: u8, len: usize, version: Version) -> usize {
-    match mode {
-        0 => NumericMode.seg_len(len, version),
-        1 => AlphanumericMode.seg_len(len, version),
-        _ => ByteMode.seg_len(len, version),
-    }
-}
-
-// Versions 1-9, 10-26, 27-40 have different char count indicator lengths
-fn cci_group(version: Version) -> usize {
-    (version > 9) as usize + (version > 26) as usize
-}
-
 const UNKNOWN: usize = usize::MAX;
 const INF: usize = usize::MAX / 4;
 
@@ -186,14 +169,6 @@ impl<'a> MixedEncoder<'a> {
         }
     }
 
-    fn fill(&mut self, version: Version) {
-        let group = cci_group(version);
-        if self.filled != group {
-            self.bits[group] = self.segment(version);
-            self.filled = group;
-        }
-    }
-
     // Costs are in sixths of a bit so each char has a fixed cost:
     // numeric 20, alphanumeric 33, byte 48. Segments round up when closed.
     fn segment(&mut self, version: Version) -> usize {
@@ -209,7 +184,12 @@ impl<'a> MixedEncoder<'a> {
         let first = MODE[bytes[0] as usize];
         if bytes.iter().all(|&b| MODE[b as usize] == first) {
             modes.fill(first);
-            return seg_len(first, n, version);
+
+            return match first {
+                0 => NumericMode.seg_len(n, version),
+                1 => AlphanumericMode.seg_len(n, version),
+                _ => ByteMode.seg_len(n, version),
+            };
         }
 
         // header + first char
@@ -225,7 +205,7 @@ impl<'a> MixedEncoder<'a> {
         for i in 1..n {
             let mode = MODE[bytes[i] as usize];
 
-            // Only byte mode is possible, so nothing to compare
+            // byte mode shortcut for url-like input
             if mode == 2 && c0 == INF && c1 == INF {
                 c2 += 48;
                 modes[i] = 2 << 4;
@@ -304,15 +284,20 @@ impl<'a> MixedEncoder<'a> {
 }
 impl<'a> Encoder for MixedEncoder<'a> {
     fn bit_len(&mut self, version: Version) -> usize {
-        let group = cci_group(version);
+        let group = (version > 9) as usize + (version > 26) as usize;
         if self.bits[group] == UNKNOWN {
-            self.fill(version);
+            self.bits[group] = self.segment(version);
+            self.filled = group;
         }
         self.bits[group]
     }
 
     fn encode(&mut self, version: Version, push: &mut dyn FnMut(u16, u8)) {
-        self.fill(version);
+        let group = (version > 9) as usize + (version > 26) as usize;
+        if self.filled != group {
+            self.bits[group] = self.segment(version);
+            self.filled = group;
+        }
 
         let bytes = self.bytes;
         let modes = &*self.modes;

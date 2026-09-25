@@ -5,7 +5,8 @@
 
 use core::fmt;
 
-pub mod encoders;
+#[cfg(feature = "extras")]
+pub mod extras;
 
 /// 1 to 40 inclusive
 pub type Version = u8;
@@ -274,7 +275,6 @@ pub trait Plugin {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
 pub enum FuqrError {
     TextTooLong {
         max_version: Version,

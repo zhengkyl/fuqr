@@ -1,4 +1,5 @@
-use fuqr::encoders::{
+#[cfg(feature = "extras")]
+use fuqr::extras::encoders::{
     AlphanumericEncoder, AlphanumericMode, MixedEncoder, NumericEncoder, NumericMode,
 };
 use fuqr::{

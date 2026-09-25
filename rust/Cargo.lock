@@ -5,3 +5,6 @@ version = 3
 [[package]]
 name = "fuqr"
 version = "2.1.0"
+dependencies = [
+ "fuqr",
+]
