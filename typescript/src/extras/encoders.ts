@@ -176,11 +176,19 @@ export class MixedEncoder implements Encoder {
     let c2 = start2;
 
     for (i = 1; i < n; i++) {
+      mode = modes[i];
+
+      // byte mode shortcut for url-like input
+      if (mode === 2 && c0 === Infinity && c1 === Infinity) {
+        c2 += 48;
+        prev[i] = 2 << 4;
+        continue;
+      }
+
       // Cost of closing a segment in each mode
       const r0 = Math.ceil(c0 / 6) * 6;
       const r1 = Math.ceil(c1 / 6) * 6;
       const r2 = Math.ceil(c2 / 6) * 6;
-      mode = modes[i];
       let p = 0;
 
       // Staying wins ties to avoid pointless segments
