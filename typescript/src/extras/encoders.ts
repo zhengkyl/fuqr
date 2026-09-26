@@ -63,7 +63,7 @@ export class NumericEncoder implements Encoder {
   }
 }
 
-// Alphanumeric value of each byte, or 255 if not alphanumeric
+// Base45 value of each byte, or 255 if not alphanumeric
 export const B45_LUT = new Uint8Array(256).fill(255);
 for (let i = 0; i < 45; i++) {
   B45_LUT["0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".charCodeAt(i)] = i;
@@ -92,11 +92,9 @@ export class AlphanumericEncoder implements Encoder {
 
 type Segment = { mode: number; start: number; end: number };
 
-// Indexed by MixedEncoder segment mode
 const MODES = [NumericMode, AlphanumericMode, ByteMode];
 
-// Cheapest mode each byte fits in: 0 numeric, 1 alphanumeric, 2 byte
-// All multibyte UTF-8 bytes look like 1xxx_xxxx, so they are always 2
+// Cheapest mode each byte fits in
 const MODE = new Uint8Array(256).fill(2);
 for (let i = 0; i < 256; i++) {
   if (B45_LUT[i] < 10) MODE[i] = 0;
@@ -254,13 +252,7 @@ export class MixedEncoder implements Encoder {
 
     const bytes = this.bytes;
     for (const { mode, start, end } of this.segments) {
-      if (mode === 0) {
-        NumericMode.encodeUtf8(version, bytes.subarray(start, end), push);
-      } else if (mode === 1) {
-        AlphanumericMode.encodeUtf8(version, bytes.subarray(start, end), push);
-      } else {
-        ByteMode.encodeUtf8(version, bytes.subarray(start, end), push);
-      }
+      MODES[mode].encodeUtf8(version, bytes.subarray(start, end), push);
     }
   }
 }
