@@ -2,7 +2,7 @@
 // Writes nothing, since it checks the reference, not ports. Pass a seed to
 // reproduce a run.
 import { type Ecl, type Mask } from "../typescript/src/fuqr.ts";
-import { type Case, check, describe, makeRandom, MODES, run } from "./common.ts";
+import { type Case, check, describe, type Encoder, ENCODERS, makeRandom, run } from "./common.ts";
 
 const ROUNDS = 5;
 
@@ -14,19 +14,25 @@ console.log(`seed ${seed}`);
 const random = makeRandom(seed);
 
 let failures = 0;
-for (const mode of MODES) {
+for (const encoder of Object.keys(ENCODERS) as Encoder[]) {
   const cases: Case[] = [];
   // Every version and ecl, since block layout depends on both
   for (let round = 0; round < ROUNDS; round++) {
     for (let version = 1; version <= 40; version++) {
       for (const ecl of [0, 1, 2, 3] as Ecl[]) {
-        const pinned = { mode, minVersion: version, maxVersion: version, minEcl: ecl, maxEcl: ecl };
+        const pinned = {
+          encoder,
+          minVersion: version,
+          maxVersion: version,
+          minEcl: ecl,
+          maxEcl: ecl,
+        };
 
         // Halve content until it fits, so blocks are mostly filled with content
         let c = {
           ...pinned,
           mask: random.int(0, 7) as Mask,
-          content: random.content(mode, MAX_LEN[mode]),
+          content: random.content(encoder, MAX_LEN[encoder]),
         };
         while ("error" in run(c)) {
           const codePoints = [...c.content];
@@ -35,7 +41,7 @@ for (const mode of MODES) {
         cases.push(c);
 
         // Cut URLs are junk, so skip ones that don't fit
-        if (mode !== "mixed") continue;
+        if (encoder !== "mixed") continue;
         const url = { ...pinned, mask: random.int(0, 7) as Mask, content: random.url() };
         if (!("error" in run(url))) cases.push(url);
       }
@@ -48,7 +54,7 @@ for (const mode of MODES) {
     failures++;
     console.error(`${describe(c)} ${error}`);
   }
-  console.log(`${mode}: checked ${cases.length} cases`);
+  console.log(`${encoder}: checked ${cases.length} cases`);
 }
 
 if (failures > 0) {

@@ -21,11 +21,20 @@ import {
   Module,
 } from "../typescript/src/fuqr.ts";
 
-export type Mode = "numeric" | "alphanumeric" | "byte" | "mixed";
-export const MODES: Mode[] = ["numeric", "alphanumeric", "byte", "mixed"];
+// Segment modes, which an encoder combines into encoded data
+export const MODES = { numeric: NumericMode, alphanumeric: AlphanumericMode, byte: ByteMode };
+export type Mode = keyof typeof MODES;
+
+export const ENCODERS = {
+  numeric: NumericEncoder,
+  alphanumeric: AlphanumericEncoder,
+  byte: ByteEncoder,
+  mixed: MixedEncoder,
+};
+export type Encoder = keyof typeof ENCODERS;
 
 export type Case = {
-  mode: Mode;
+  encoder: Encoder;
   minVersion: number;
   maxVersion: number;
   minEcl: Ecl;
@@ -38,16 +47,9 @@ export type Result =
   | { error: string }
   | { version: number; ecl: Ecl; mask: Mask; matrix: Uint8Array };
 
-export function makeEncoder(mode: Mode, content: string) {
-  if (mode === "numeric") return new NumericEncoder(content);
-  if (mode === "alphanumeric") return new AlphanumericEncoder(content);
-  if (mode === "byte") return new ByteEncoder(content);
-  return new MixedEncoder(content);
-}
-
-export function run({ mode, content, ...options }: Case): Result {
+export function run({ encoder, content, ...options }: Case): Result {
   try {
-    return generateWithEncoder(makeEncoder(mode, content), options);
+    return generateWithEncoder(new ENCODERS[encoder](content), options);
   } catch (err) {
     if (err instanceof FuqrError) return { error: err.code };
     throw err;
@@ -93,9 +95,8 @@ function nodeQrcode(c: Case, segments: QRCode.QRCodeSegment[] | string) {
 
 // node-qrcode picks its own mixed segments, which may be longer than ours
 function nodeQrcodeBitLen(c: Case) {
-  const modes = { Numeric: NumericMode, Alphanumeric: AlphanumericMode, Byte: ByteMode };
   return nodeQrcode(c, c.content).segments.reduce((bits, segment) => {
-    const mode = modes[segment.mode.id as keyof typeof modes];
+    const mode = MODES[segment.mode.id.toLowerCase() as Mode];
     return bits + mode.segLen(segment.data.length, c.minVersion);
   }, 0);
 }
@@ -103,10 +104,10 @@ function nodeQrcodeBitLen(c: Case) {
 // node-qrcode's matrix, or null if it doesn't fit
 function nodeQrcodeMatrix(c: Case) {
   let segments: QRCode.QRCodeSegment[] | string;
-  if (c.mode === "mixed") segments = c.content;
-  else if (c.mode === "byte")
-    segments = [{ mode: c.mode, data: new TextEncoder().encode(c.content) }];
-  else segments = [{ mode: c.mode, data: c.content }];
+  if (c.encoder === "mixed") segments = c.content;
+  else if (c.encoder === "byte")
+    segments = [{ mode: c.encoder, data: new TextEncoder().encode(c.content) }];
+  else segments = [{ mode: c.encoder, data: c.content }];
   try {
     return nodeQrcode(c, segments).modules.data;
   } catch {
@@ -144,16 +145,16 @@ export async function check(c: Case, result: Result) {
   const difference = compareModules(c.minVersion * 4 + 17, ours, theirs);
   if (difference === "") return "";
 
-  // Mixed mode may differ from node-qrcode when it finds a shorter encoding
-  if (c.mode === "mixed" && ours != null) {
-    const bits = makeEncoder(c.mode, c.content).bitLen(c.minVersion);
+  // Mixed encoder may differ from node-qrcode when it finds a shorter encoding
+  if (c.encoder === "mixed" && ours != null) {
+    const bits = new MixedEncoder(c.content).bitLen(c.minVersion);
     if (theirs == null || bits <= nodeQrcodeBitLen(c)) return "";
   }
   return `node-qrcode ${difference}`;
 }
 
 export const describe = (c: Case) =>
-  `${c.mode}: ${c.minVersion} ${c.minEcl} ${c.mask} ${JSON.stringify(c.content)}`;
+  `${c.encoder}: ${c.minVersion} ${c.minEcl} ${c.mask} ${JSON.stringify(c.content)}`;
 
 const DIGITS = [[0x30, 0x39]];
 const ALPHANUMERIC = [
@@ -192,9 +193,9 @@ export function makeRandom(seed: number) {
   const chars = (alphabet: string, min: number, max: number) =>
     Array.from({ length: int(min, max) }, () => pick([...alphabet])).join("");
 
-  // Drawing from a few ranges makes runs, so mixed mode has to pick switches
-  const content = (mode: Mode, maxLen: number) => {
-    const ranges = [0, 0, 0].map(() => pick(RANGES[mode]));
+  // Drawing from a few ranges makes runs, so the mixed encoder has to pick switches
+  const content = (encoder: Encoder, maxLen: number) => {
+    const ranges = [0, 0, 0].map(() => pick(RANGES[encoder]));
     return Array.from({ length: int(0, maxLen) }, () => {
       const [lo, hi] = pick(ranges);
       return String.fromCodePoint(int(lo, hi));

@@ -36,11 +36,11 @@ const ENCODERS = {
   mixed: MixedEncoder,
 };
 
-function run(mode: string, content: string, fields: string[]) {
+function run(encoderName: string, content: string, fields: string[]) {
   const [minVersion, maxVersion, minEcl, maxEcl, mask] = fields.map(Number);
   const options = { minVersion, maxVersion, minEcl, maxEcl, mask } as GenerateOptions;
   try {
-    const encoder = new ENCODERS[mode as keyof typeof ENCODERS](content);
+    const encoder = new ENCODERS[encoderName as keyof typeof ENCODERS](content);
     const qr = generateWithEncoder(encoder, options);
     return `${qr.version}-${qr.ecl}-${qr.mask}-${fnv1a64(qr.matrix)}`;
   } catch (err) {
@@ -54,13 +54,13 @@ const names = readdirSync(FIXTURES_DIR);
 test.each(names)(
   "%s",
   (name) => {
-    const mode = name.replace(/\.txt$/, "");
+    const encoderName = name.replace(/\.txt$/, "");
     const lines = readFileSync(new URL(name, FIXTURES_DIR), "utf8").trimEnd().split("\n");
     const errors = [];
     for (const [i, line] of lines.entries()) {
       const fields = line.split(" ");
       const expected = fields[5];
-      const actual = run(mode, parseContent(fields.slice(6).join(" ")), fields.slice(0, 5));
+      const actual = run(encoderName, parseContent(fields.slice(6).join(" ")), fields.slice(0, 5));
       if (actual !== expected) errors.push(`${name}:${i + 1}: expected ${expected}, got ${actual}`);
     }
     expect(errors.slice(0, 10)).toEqual([]);

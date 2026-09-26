@@ -1,10 +1,11 @@
 import { writeFileSync } from "node:fs";
+import { MixedEncoder } from "../typescript/src/extras/encoders.ts";
 import { type Ecl, type Mask, NUM_DATA_BITS, NUM_EC_BYTES } from "../typescript/src/fuqr.ts";
 import {
   type Case,
   check,
   describe,
-  makeEncoder,
+  type Encoder,
   type Mode,
   MODES,
   type Result,
@@ -15,10 +16,22 @@ const FIXTURES_DIR = new URL("fixtures/", import.meta.url);
 
 const ALL = { minVersion: 1, maxVersion: 40, minEcl: 0, maxEcl: 3 } as const;
 
-const UNITS = {
+// Version and min ecl pinned, so the next ecl can't take content that overflows.
+// Mask cycles so every ecl meets every mask.
+const pinned = (encoder: Encoder, version: number, ecl: number) => ({
+  encoder,
+  minVersion: version,
+  maxVersion: version,
+  minEcl: ecl as Ecl,
+  maxEcl: 3 as Ecl,
+  mask: ((version + ecl) % 8) as Mask,
+});
+
+const FILLER: Record<Mode, string> = {
   numeric: "0123456789",
   alphanumeric: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:",
-  byte: "The quick brown fox jumps over the lazy dog. ",
+  // only 1 byte codepoints to fill arbitrary length
+  byte: `HTTPS://abc.defghi.jkl/m?no=pq&rs=tuv#wxyz %+-_$!,;"@^*[](){}\n`,
 };
 
 // Runs of byte, alphanumeric and numeric chars, long enough to be their own
@@ -37,19 +50,32 @@ for (const b of [1, 2, 3, 4, 0]) {
 const cycle = (unit: string, len: number) =>
   unit.repeat(Math.ceil(len / unit.length)).slice(0, len);
 
-// Longest content cycling unit with bitLen at most bits, by binary search.
-// bitLen never shrinks as content grows, even for mixed, since dropping a
-// char from an optimal encoding never makes it longer.
-function longest(mode: Mode, unit: string, version: number, bits: number) {
-  const fits = (len: number) => makeEncoder(mode, cycle(unit, len)).bitLen(version) <= bits;
-  let lo = 0;
-  let hi = 8000;
+const dataBits = (version: number, ecl: number) =>
+  ((NUM_DATA_BITS[version] >> 3) - NUM_EC_BYTES[version][ecl]) * 8;
+
+function longest(fits: (len: number) => boolean) {
+  let lo = 0; // inclusive
+  let hi = 8000; // exclusive
   while (lo < hi) {
     const mid = (lo + hi + 1) >> 1;
     if (fits(mid)) lo = mid;
     else hi = mid - 1;
   }
-  return cycle(unit, lo);
+  return lo;
+}
+
+function boundaries(mode: Mode) {
+  const cases: Case[] = [];
+  for (let version = 1; version <= 40; version++) {
+    for (let ecl = 0; ecl < 4; ecl++) {
+      const options = pinned(mode, version, ecl);
+      const bits = dataBits(version, ecl);
+      const len = longest((len) => MODES[mode].segLen(len, version) <= bits);
+      const content = cycle(FILLER[mode], len);
+      cases.push({ ...options, content }, { ...options, content: content + "0" });
+    }
+  }
+  return cases;
 }
 
 // Mixed content with bitLen exactly bits. Its boundary is a mix of segment
@@ -57,77 +83,41 @@ function longest(mode: Mode, unit: string, version: number, bits: number) {
 // reaches any bit count, including those single modes can't.
 function exactMixed(version: number, bits: number) {
   for (const unit of MIXED_UNITS) {
-    const content = longest("mixed", unit, version, bits);
-    if (makeEncoder("mixed", content).bitLen(version) === bits) return content;
+    const bitLen = (len: number) => new MixedEncoder(cycle(unit, len)).bitLen(version);
+    const len = longest((len) => bitLen(len) <= bits);
+    if (bitLen(len) === bits) return cycle(unit, len);
   }
   throw new Error(`no mixed content has ${bits} bits at version ${version}`);
 }
 
-const dataBits = (version: number, ecl: number) =>
-  ((NUM_DATA_BITS[version] >> 3) - NUM_EC_BYTES[version][ecl]) * 8;
-
-// With version pinned and any ecl, each ecl gets the content too long for the
-// next ecl, up to its own capacity. The largest and smallest of every version
-// and ecl cover every block layout, padding and ecl selection. With default
-// options, each version's largest and one more test version selection. Mask
-// cycles so every ecl meets every mask.
-function boundaries(mode: "numeric" | "alphanumeric" | "byte") {
-  const cases: Case[] = [];
-  for (let version = 1; version <= 40; version++) {
-    const largest = (ecl: number) => longest(mode, UNITS[mode], version, dataBits(version, ecl));
-    const justOver = (ecl: number) => cycle(UNITS[mode], largest(ecl).length + 1);
-
-    const auto: Case = { mode, ...ALL, mask: (version % 8) as Mask, content: "" };
-    cases.push({ ...auto, content: largest(0) }, { ...auto, content: justOver(0) });
-
-    const pinned = { ...auto, minVersion: version, maxVersion: version };
-    for (let ecl = 0; ecl < 4; ecl++) {
-      cases.push(
-        { ...pinned, content: largest(ecl) },
-        { ...pinned, content: ecl === 3 ? "" : justOver(ecl + 1) },
-      );
-    }
-  }
-  return cases;
-}
-
-// Same as boundaries, but by exact bit count instead of char count, plus a
-// cut short terminator with 1 to 3 bits left, which single modes can't reach.
+// Same as boundaries, but by exact bit count, plus a cut short terminator
+// with 1 to 3 bits left, which single modes can't reach
 function mixedBoundaries() {
   const cases: Case[] = [];
   for (let version = 1; version <= 40; version++) {
-    const exact = (bits: number) => exactMixed(version, bits);
-
-    const auto: Case = { mode: "mixed", ...ALL, mask: (version % 8) as Mask, content: "" };
-    const full = dataBits(version, 0);
-    cases.push({ ...auto, content: exact(full) }, { ...auto, content: exact(full + 1) });
-
-    const pinned = { ...auto, minVersion: version, maxVersion: version };
     for (let ecl = 0; ecl < 4; ecl++) {
+      const options = pinned("mixed", version, ecl);
       const bits = dataBits(version, ecl);
       cases.push(
-        { ...pinned, content: exact(bits) },
-        { ...pinned, content: ecl === 3 ? "" : exact(dataBits(version, ecl + 1) + 1) },
-        { ...pinned, content: exact(bits - 1 - ((version + ecl) % 3)) },
+        { ...options, content: exactMixed(version, bits) },
+        { ...options, content: exactMixed(version, bits + 1) },
+        { ...options, content: exactMixed(version, bits - 1 - ((version + ecl) % 3)) },
       );
     }
   }
   return cases;
 }
 
-function toCase(mode: Mode) {
+function toCase(encoder: Encoder) {
   return (content: string, i: number) => ({
-    mode,
+    encoder,
     content,
-    minVersion: 1,
-    maxVersion: 40,
-    minEcl: 0 as Ecl,
-    maxEcl: 3 as Ecl,
+    ...ALL,
     mask: (i % 8) as Mask,
   });
 }
 
-const CASES: Record<Mode, Case[]> = {
+const CASES: Record<Encoder, Case[]> = {
   numeric: [
     ...[
       "",
@@ -240,13 +230,13 @@ function formatFixture(c: Case, result: Result) {
 }
 
 // Checks every case before writing any file
-const files = new Map<Mode, string[]>();
+const files = new Map<Encoder, string[]>();
 const errors = [];
-for (const mode of MODES) {
+for (const [encoder, cases] of Object.entries(CASES) as [Encoder, Case[]][]) {
   const lines = [];
   // Other options giving the same result for a content add nothing
   const seen = new Set<string>();
-  for (const c of CASES[mode]) {
+  for (const c of cases) {
     const result = run(c);
     const key = `${c.content} ${formatResult(result)}`;
     if (seen.has(key)) continue;
@@ -256,7 +246,7 @@ for (const mode of MODES) {
     if (error !== "") errors.push(`${describe(c)} ${error}`);
     lines.push(formatFixture(c, result));
   }
-  files.set(mode, lines);
+  files.set(encoder, lines);
 }
 
 if (errors.length > 0) {
@@ -264,7 +254,7 @@ if (errors.length > 0) {
   console.error(`${errors.length} bad cases, fixtures not written`);
   process.exit(1);
 }
-for (const [mode, lines] of files) {
-  writeFileSync(new URL(`${mode}.txt`, FIXTURES_DIR), lines.join("\n") + "\n");
-  console.log(`wrote ${lines.length} fixtures to ${mode}.txt`);
+for (const [encoder, lines] of files) {
+  writeFileSync(new URL(`${encoder}.txt`, FIXTURES_DIR), lines.join("\n") + "\n");
+  console.log(`wrote ${lines.length} fixtures to ${encoder}.txt`);
 }
