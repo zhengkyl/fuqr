@@ -71,3 +71,13 @@ Error can be introduced to place more pixels. Standard QR code decoding can corr
 - When calculating error correction capacity, there is no need to account for misdecode protection for Version 1 Low, Medium and Version 2 Low.
 
 - The timing patterns are not used. Only the bottom right alignment pattern is used although scanning can succeed without it, especially on smaller codes.
+
+- Only some (version, ecl) combinations are reachable, because the data capacities of lower versions overlap higher versions.
+
+    | Version | min L   | min M | min Q | min H |
+    | ------- | ------- | ----- | ----- | ----- |
+    | 1       | L M Q H | M Q H | Q H   | H     |
+    | 2       | L M Q   | M Q   | Q H   | H     |
+    | 3–4     | L M     | M Q   | Q H   | H     |
+    | 5       | L M     | M     | Q     | H     |
+    | 6–40    | L       | M     | Q     | H     |
