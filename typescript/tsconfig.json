@@ -17,5 +17,6 @@
     "outDir": "./dist",
     "declaration": true,
     "types": []
-  }
+  },
+  "include": ["src"]
 }

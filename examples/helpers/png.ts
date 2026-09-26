@@ -16,8 +16,9 @@ export function toRgba(png: DecodedPng): { width: number; height: number; rgba: 
       if (depth < 8) {
         const byte = data[y * rowBytes + ((x / perByte) | 0)];
         const s = (byte >> ((perByte - 1 - (x % perByte)) * depth)) & max;
-        if (palette) [r, g, b, a = 255] = palette[s]; // 4th entry present only with a tRNS chunk
-        else (r = g = b = s * scale), (a = 255);
+        if (palette)
+          [r, g, b, a = 255] = palette[s]; // 4th entry present only with a tRNS chunk
+        else ((r = g = b = s * scale), (a = 255));
       } else if (palette) {
         [r, g, b, a = 255] = palette[data[p]];
       } else {

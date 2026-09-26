@@ -4,8 +4,9 @@
   "scripts": {
     "build:ts": "pnpm -F fuqr build",
     "examples": "ls examples/*.ts | xargs -I {} node {}",
-    "test": "vitest run",
-    "test:fast": "FUQR_FAST=1 vitest run",
+    "test": "pnpm -F fuqr test",
+    "gen:fixtures": "node helpers/fixtures.ts",
+    "fuzz": "node helpers/fuzz.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"
   },
@@ -16,7 +17,6 @@
     "oxfmt": "^0.52.0",
     "qrcode": "^1.5.4",
     "typescript": "^5.8.0",
-    "vitest": "^3.0.0",
     "zxing-wasm": "^3.1.2"
   }
 }
