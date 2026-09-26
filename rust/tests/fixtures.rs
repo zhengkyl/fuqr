@@ -42,15 +42,15 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
     })
 }
 
-fn run(mode: &str, content: &str, options: GenerateOptions) -> String {
+fn run(encoder_name: &str, content: &str, options: GenerateOptions) -> String {
     let mut scratch = vec![0; content.len()];
     let result = (|| -> Result<QrCode, FuqrError> {
-        let encoder: &mut dyn Encoder = match mode {
+        let encoder: &mut dyn Encoder = match encoder_name {
             "numeric" => &mut NumericEncoder::new(content)?,
             "alphanumeric" => &mut AlphanumericEncoder::new(content)?,
             "byte" => &mut ByteEncoder::new(content),
             "mixed" => &mut MixedEncoder::new(content, &mut scratch),
-            _ => panic!("bad mode {mode}"),
+            _ => panic!("bad encoder {encoder_name}"),
         };
         generate_with_encoder(encoder, options, &mut [])
     })();
@@ -72,7 +72,7 @@ fn matches_fixtures() {
     for entry in fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        let Some(mode) = name.strip_suffix(".txt") else {
+        let Some(encoder_name) = name.strip_suffix(".txt") else {
             continue;
         };
         for (i, line) in fs::read_to_string(&path).unwrap().lines().enumerate() {
@@ -87,7 +87,7 @@ fn matches_fixtures() {
                 mask: mask.parse().unwrap(),
             };
 
-            let actual = run(mode, &parse_content(content), options);
+            let actual = run(encoder_name, &parse_content(content), options);
             if actual != expected {
                 errors.push(format!(
                     "{name}:{}: expected {expected}, got {actual}",
