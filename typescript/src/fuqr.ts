@@ -196,7 +196,7 @@ export interface Encoder {
 export interface Mode {
   indicator: number;
   cciLen(version: number): number;
-  segLen(len: number, version: number): number;
+  segLen(version: number, len: number): number;
   encodeUtf8(version: number, bytes: Uint8Array, push: (bits: number, len: number) => void): void;
 }
 
@@ -237,7 +237,7 @@ export class FuqrError extends Error {
 export const ByteMode: Mode = {
   indicator: 0b0100,
   cciLen: (version) => (version < 10 ? 8 : 16),
-  segLen: (len, version) => 4 + ByteMode.cciLen(version) + len * 8,
+  segLen: (version, len) => 4 + ByteMode.cciLen(version) + len * 8,
   encodeUtf8: (version, bytes, push) => {
     push(ByteMode.indicator, 4);
     push(bytes.length, ByteMode.cciLen(version));
@@ -253,7 +253,7 @@ export class ByteEncoder implements Encoder {
     this.bytes = new TextEncoder().encode(content);
   }
   bitLen(version: number) {
-    return ByteMode.segLen(this.bytes.length, version);
+    return ByteMode.segLen(version, this.bytes.length);
   }
   encode(version: number, push: (bits: number, len: number) => void) {
     ByteMode.encodeUtf8(version, this.bytes, push);
