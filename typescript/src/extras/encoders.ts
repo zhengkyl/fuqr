@@ -5,36 +5,7 @@ export const NumericMode: Mode = {
   cciLen: (version) => 10 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
   // 10 bits per 3 digits, 4 or 7 bits for 1 or 2 leftover digits
   segLen: (len, version) => 4 + NumericMode.cciLen(version) + Math.ceil((len * 10) / 3),
-};
-
-export const AlphanumericMode: Mode = {
-  indicator: 0b0010,
-  cciLen: (version) => 9 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
-  // 11 bits per 2 chars, 6 bits for 1 leftover char
-  segLen: (len, version) => 4 + AlphanumericMode.cciLen(version) + Math.ceil((len * 11) / 2),
-};
-
-export class NumericEncoder implements Encoder {
-  public bytes: Uint8Array;
-  constructor(content: string) {
-    const bytes = new Uint8Array(content.length);
-    for (let i = 0; i < content.length; i++) {
-      const byte = content.charCodeAt(i);
-      if (byte < 0x30 || 0x39 < byte) {
-        throw new FuqrError("INVALID_ENCODING", `Content is not numeric`);
-      }
-      bytes[i] = byte;
-    }
-    this.bytes = bytes;
-  }
-
-  bitLen(version: number) {
-    return NumericMode.segLen(this.bytes.length, version);
-  }
-
-  encode(version: number, push: (bits: number, len: number) => void) {
-    const bytes = this.bytes;
-
+  encodeUtf8: (version, bytes, push) => {
     push(NumericMode.indicator, 4);
     push(bytes.length, NumericMode.cciLen(version));
     const groups = Math.floor(bytes.length / 3);
@@ -51,48 +22,71 @@ export class NumericEncoder implements Encoder {
         push((bytes[bytes.length - 2] - 0x30) * 10 + (bytes[bytes.length - 1] - 0x30), 7);
         break;
     }
-  }
-}
+  },
+};
 
-// Alphanumeric value of each byte, or 255 if not alphanumeric
-const B45 = new Uint8Array(256).fill(255);
-for (let i = 0; i < 45; i++) {
-  B45["0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".charCodeAt(i)] = i;
-}
+export const AlphanumericMode: Mode = {
+  indicator: 0b0010,
+  cciLen: (version) => 9 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
+  // 11 bits per 2 chars, 6 bits for 1 leftover char
+  segLen: (len, version) => 4 + AlphanumericMode.cciLen(version) + Math.ceil((len * 11) / 2),
+  encodeUtf8: (version, bytes, push) => {
+    push(AlphanumericMode.indicator, 4);
+    push(bytes.length, AlphanumericMode.cciLen(version));
+    for (let i = 0; i < Math.floor(bytes.length / 2); i++) {
+      push(B45_LUT[bytes[i * 2]] * 45 + B45_LUT[bytes[i * 2 + 1]], 11);
+    }
+    if (bytes.length & 1) {
+      push(B45_LUT[bytes[bytes.length - 1]], 6);
+    }
+  },
+};
 
-export class AlphanumericEncoder implements Encoder {
-  static byteToB45(c: number): number {
-    return c < 256 ? B45[c] : 255;
-  }
-
+export class NumericEncoder implements Encoder {
   public bytes: Uint8Array;
   constructor(content: string) {
     const bytes = new Uint8Array(content.length);
     for (let i = 0; i < content.length; i++) {
       const byte = content.charCodeAt(i);
-      if (byte > 255 || B45[byte] === 255) {
+      if (byte < 0x30 || 0x39 < byte) {
+        throw new FuqrError("INVALID_ENCODING", `Content is not numeric`);
+      }
+      bytes[i] = byte;
+    }
+    this.bytes = bytes;
+  }
+  bitLen(version: number) {
+    return NumericMode.segLen(this.bytes.length, version);
+  }
+  encode(version: number, push: (bits: number, len: number) => void) {
+    NumericMode.encodeUtf8(version, this.bytes, push);
+  }
+}
+
+// Alphanumeric value of each byte, or 255 if not alphanumeric
+export const B45_LUT = new Uint8Array(256).fill(255);
+for (let i = 0; i < 45; i++) {
+  B45_LUT["0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".charCodeAt(i)] = i;
+}
+
+export class AlphanumericEncoder implements Encoder {
+  public bytes: Uint8Array;
+  constructor(content: string) {
+    const bytes = new Uint8Array(content.length);
+    for (let i = 0; i < content.length; i++) {
+      const byte = content.charCodeAt(i);
+      if (byte > 255 || B45_LUT[byte] === 255) {
         throw new FuqrError("INVALID_ENCODING", `Content is not alphanumeric`);
       }
       bytes[i] = byte;
     }
     this.bytes = bytes;
   }
-
   bitLen(version: number) {
     return AlphanumericMode.segLen(this.bytes.length, version);
   }
-
   encode(version: number, push: (bits: number, len: number) => void) {
-    const bytes = this.bytes;
-
-    push(AlphanumericMode.indicator, 4);
-    push(bytes.length, AlphanumericMode.cciLen(version));
-    for (let i = 0; i < Math.floor(bytes.length / 2); i++) {
-      push(B45[bytes[i * 2]] * 45 + B45[bytes[i * 2 + 1]], 11);
-    }
-    if (bytes.length & 1) {
-      push(B45[bytes[bytes.length - 1]], 6);
-    }
+    AlphanumericMode.encodeUtf8(version, this.bytes, push);
   }
 }
 
@@ -105,8 +99,8 @@ const MODES = [NumericMode, AlphanumericMode, ByteMode];
 // All multibyte UTF-8 bytes look like 1xxx_xxxx, so they are always 2
 const MODE = new Uint8Array(256).fill(2);
 for (let i = 0; i < 256; i++) {
-  if (B45[i] < 10) MODE[i] = 0;
-  else if (B45[i] !== 255) MODE[i] = 1;
+  if (B45_LUT[i] < 10) MODE[i] = 0;
+  else if (B45_LUT[i] !== 255) MODE[i] = 1;
 }
 
 export class MixedEncoder implements Encoder {
@@ -260,30 +254,12 @@ export class MixedEncoder implements Encoder {
 
     const bytes = this.bytes;
     for (const { mode, start, end } of this.segments) {
-      push(MODES[mode].indicator, 4);
-      push(end - start, MODES[mode].cciLen(version));
-
       if (mode === 0) {
-        let i = start;
-        for (; i + 3 <= end; i += 3) {
-          push((bytes[i] - 0x30) * 100 + (bytes[i + 1] - 0x30) * 10 + (bytes[i + 2] - 0x30), 10);
-        }
-        switch (end - i) {
-          case 1:
-            push(bytes[i] - 0x30, 4);
-            break;
-          case 2:
-            push((bytes[i] - 0x30) * 10 + (bytes[i + 1] - 0x30), 7);
-            break;
-        }
+        NumericMode.encodeUtf8(version, bytes.subarray(start, end), push);
       } else if (mode === 1) {
-        let i = start;
-        for (; i + 2 <= end; i += 2) {
-          push(B45[bytes[i]] * 45 + B45[bytes[i + 1]], 11);
-        }
-        if (i < end) push(B45[bytes[i]], 6);
+        AlphanumericMode.encodeUtf8(version, bytes.subarray(start, end), push);
       } else {
-        for (let i = start; i < end; i++) push(bytes[i], 8);
+        ByteMode.encodeUtf8(version, bytes.subarray(start, end), push);
       }
     }
   }
