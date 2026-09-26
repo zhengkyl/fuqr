@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
-import { AlphanumericEncoder, MixedEncoder } from "../src/extras/encoders.ts";
+import { B45_LUT, MixedEncoder } from "../src/extras/encoders.ts";
 
 // Curated and random contents from the root fixtures, skipping long "unit"*N
 const FIXTURE_CONTENTS = new Set(
@@ -17,7 +17,7 @@ const VERSIONS = [1, 9, 10, 26, 27, 40];
 
 function modeOf(byte: number) {
   if (0x30 <= byte && byte <= 0x39) return 0;
-  if (AlphanumericEncoder.byteToB45(byte) !== 255) return 1;
+  if (B45_LUT[byte] !== 255) return 1;
   return 2;
 }
 
