@@ -70,7 +70,7 @@ function boundaries(mode: Mode) {
     for (let ecl = 0; ecl < 4; ecl++) {
       const options = pinned(mode, version, ecl);
       const bits = dataBits(version, ecl);
-      const len = longest((len) => MODES[mode].segLen(len, version) <= bits);
+      const len = longest((len) => MODES[mode].segLen(version, len) <= bits);
       const content = cycle(FILLER[mode], len);
       cases.push({ ...options, content }, { ...options, content: content + "0" });
     }

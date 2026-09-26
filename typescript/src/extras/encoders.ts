@@ -4,7 +4,7 @@ export const NumericMode: Mode = {
   indicator: 0b0001,
   cciLen: (version) => 10 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
   // 10 bits per 3 digits, 4 or 7 bits for 1 or 2 leftover digits
-  segLen: (len, version) => 4 + NumericMode.cciLen(version) + Math.ceil((len * 10) / 3),
+  segLen: (version, len) => 4 + NumericMode.cciLen(version) + Math.ceil((len * 10) / 3),
   encodeUtf8: (version, bytes, push) => {
     push(NumericMode.indicator, 4);
     push(bytes.length, NumericMode.cciLen(version));
@@ -29,7 +29,7 @@ export const AlphanumericMode: Mode = {
   indicator: 0b0010,
   cciLen: (version) => 9 + (version > 9 ? 2 : 0) + (version > 26 ? 2 : 0),
   // 11 bits per 2 chars, 6 bits for 1 leftover char
-  segLen: (len, version) => 4 + AlphanumericMode.cciLen(version) + Math.ceil((len * 11) / 2),
+  segLen: (version, len) => 4 + AlphanumericMode.cciLen(version) + Math.ceil((len * 11) / 2),
   encodeUtf8: (version, bytes, push) => {
     push(AlphanumericMode.indicator, 4);
     push(bytes.length, AlphanumericMode.cciLen(version));
@@ -56,7 +56,7 @@ export class NumericEncoder implements Encoder {
     this.bytes = bytes;
   }
   bitLen(version: number) {
-    return NumericMode.segLen(this.bytes.length, version);
+    return NumericMode.segLen(version, this.bytes.length);
   }
   encode(version: number, push: (bits: number, len: number) => void) {
     NumericMode.encodeUtf8(version, this.bytes, push);
@@ -83,7 +83,7 @@ export class AlphanumericEncoder implements Encoder {
     this.bytes = bytes;
   }
   bitLen(version: number) {
-    return AlphanumericMode.segLen(this.bytes.length, version);
+    return AlphanumericMode.segLen(version, this.bytes.length);
   }
   encode(version: number, push: (bits: number, len: number) => void) {
     AlphanumericMode.encodeUtf8(version, this.bytes, push);
@@ -138,7 +138,7 @@ export class MixedEncoder implements Encoder {
 
     if (n === 0) {
       return {
-        bits: ByteMode.segLen(0, version),
+        bits: ByteMode.segLen(version, 0),
         segments: [{ mode: 2, start: 0, end: 0 }],
       };
     }
@@ -149,7 +149,7 @@ export class MixedEncoder implements Encoder {
     while (i < n && modes[i] === mode) i++;
     if (i === n) {
       return {
-        bits: MODES[mode].segLen(n, version),
+        bits: MODES[mode].segLen(version, n),
         segments: [{ mode, start: 0, end: n }],
       };
     }

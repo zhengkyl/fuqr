@@ -97,7 +97,7 @@ function nodeQrcode(c: Case, segments: QRCode.QRCodeSegment[] | string) {
 function nodeQrcodeBitLen(c: Case) {
   return nodeQrcode(c, c.content).segments.reduce((bits, segment) => {
     const mode = MODES[segment.mode.id.toLowerCase() as Mode];
-    return bits + mode.segLen(segment.data.length, c.minVersion);
+    return bits + mode.segLen(c.minVersion, segment.data.length);
   }, 0);
 }
 
