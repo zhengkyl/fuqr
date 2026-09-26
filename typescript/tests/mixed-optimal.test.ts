@@ -1,6 +1,16 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
-import { AlphanumericEncoder, MixedEncoder } from "../typescript/src/extras/encoders.ts";
-import { BYTE_CONTENTS } from "./data.ts";
+import { AlphanumericEncoder, MixedEncoder } from "../src/extras/encoders.ts";
+
+// Curated and random contents from the root fixtures, skipping long "unit"*N
+const FIXTURE_CONTENTS = new Set(
+  readFileSync(new URL("../../helpers/fixtures/mixed.txt", import.meta.url), "utf8")
+    .trimEnd()
+    .split("\n")
+    .map((line) => line.split(" ").slice(6).join(" "))
+    .filter((field) => field.endsWith('"'))
+    .map((field) => JSON.parse(field) as string),
+);
 
 // Version groups with different char count indicator lengths
 const VERSIONS = [1, 9, 10, 26, 27, 40];
@@ -57,12 +67,14 @@ function checkAll(contents: Iterable<string>, version: number) {
 }
 
 // All strings of length up to maxLen made from alphabet
-function* strings(alphabet: string[], maxLen: number): Generator<string> {
+function strings(alphabet: string[], maxLen: number) {
   let layer = [""];
+  const all = [];
   for (let len = 1; len <= maxLen; len++) {
     layer = layer.flatMap((s) => alphabet.map((c) => s + c));
-    yield* layer;
+    all.push(...layer);
   }
+  return all;
 }
 
 describe("mixed mode is optimal", () => {
@@ -81,7 +93,7 @@ describe("mixed mode is optimal", () => {
     60_000,
   );
 
-  test.each(VERSIONS)("test data version %i", (version) => {
-    checkAll(BYTE_CONTENTS, version);
+  test.each(VERSIONS)("fixture contents version %i", (version) => {
+    checkAll(FIXTURE_CONTENTS, version);
   });
 });

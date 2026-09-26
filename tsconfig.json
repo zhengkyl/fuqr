@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["examples/**/*.ts", "__tests__/**/*.ts", "typescript/**/*.ts"]
+  "include": ["examples/**/*.ts", "helpers/**/*.ts", "typescript/**/*.ts"]
 }
