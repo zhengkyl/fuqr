@@ -16,8 +16,6 @@ const FIXTURES_DIR = new URL("fixtures/", import.meta.url);
 
 const ALL = { minVersion: 1, maxVersion: 40, minEcl: 0, maxEcl: 3 } as const;
 
-// Version and min ecl pinned, so the next ecl can't take content that overflows.
-// Mask cycles so every ecl meets every mask.
 const pinned = (encoder: Encoder, version: number, ecl: number) => ({
   encoder,
   minVersion: version,
@@ -29,23 +27,11 @@ const pinned = (encoder: Encoder, version: number, ecl: number) => ({
 
 const FILLER: Record<Mode, string> = {
   numeric: "0123456789",
-  alphanumeric: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:",
-  // only 1 byte codepoints to fill arbitrary length
-  byte: `HTTPS://abc.defghi.jkl/m?no=pq&rs=tuv#wxyz %+-_$!,;"@^*[](){}\n`,
+  // no more than 5 numeric in row to prevent merge
+  alphanumeric: "ABCDEFGHIJKLMNOPQRSTUVWXYZ 01234$%*+-./:56789",
+  // no more than 5 b45 or 3 digits in row
+  byte: `https://ab.cd/EFG?h=123&i=jk#l_m!n,o;"p'q@r^[s](t){u}\n`,
 };
-
-// Runs of byte, alphanumeric and numeric chars, long enough to be their own
-// segments where possible. All three modes are tried first.
-const MIXED_UNITS: string[] = [];
-for (const b of [1, 2, 3, 4, 0]) {
-  for (const a of [12, 13, 14, 15, 16, 1, 2, 3, 4, 5, 6, 0]) {
-    for (let d = 4; d <= 20; d++) {
-      MIXED_UNITS.push(
-        "abcd".slice(0, b) + "ABCDEFGHIJKLMNOP".slice(0, a) + "0123456789".repeat(2).slice(0, d),
-      );
-    }
-  }
-}
 
 const cycle = (unit: string, len: number) =>
   unit.repeat(Math.ceil(len / unit.length)).slice(0, len);
@@ -78,20 +64,46 @@ function boundaries(mode: Mode) {
   return cases;
 }
 
-// Mixed content with bitLen exactly bits. Its boundary is a mix of segment
-// lengths rather than a char count, so trying units with different runs
-// reaches any bit count, including those single modes can't.
+// Mixed content with bitLen exactly bits
 function exactMixed(version: number, bits: number) {
-  for (const unit of MIXED_UNITS) {
-    const bitLen = (len: number) => new MixedEncoder(cycle(unit, len)).bitLen(version);
-    const len = longest((len) => bitLen(len) <= bits);
-    if (bitLen(len) === bits) return cycle(unit, len);
-  }
-  throw new Error(`no mixed content has ${bits} bits at version ${version}`);
+  const run = (mode: Mode, len: number) => (len === 0 ? 0 : MODES[mode].segLen(version, len));
+  const content = (b: number, a: number, d: number) => ({
+    text: cycle(FILLER.numeric, d) + cycle(FILLER.alphanumeric, a) + cycle(FILLER.byte, b),
+    runs: [b, a, d].filter((len) => len > 0).length,
+  });
+
+  // min len segments where savings exceed header length, since ties merge
+  let minAlnum = 1;
+  while (run("alphanumeric", minAlnum) >= 8 * minAlnum) minAlnum++;
+  let minDigits = 1;
+  while (run("numeric", minDigits) >= Math.floor((11 * minDigits) / 2)) minDigits++;
+
+  // digit bits % 8 repeat every 12 lengths (+40 bits) and hits 0 to 8
+  const padded = () => {
+    for (let d = minDigits; d < minDigits + 12; d++) {
+      const rest = bits - run("alphanumeric", minAlnum) - run("numeric", d);
+      const b = (rest - MODES.byte.segLen(version, 0)) / 8;
+      if (Number.isInteger(b) && b > 0) return content(b, minAlnum, d);
+    }
+  };
+  // Too few bits for all three, so alphanumeric and digits sum to bits
+  const unpadded = () => {
+    for (let a = 1; run("alphanumeric", a) < bits; a++) {
+      for (let d = minDigits; run("alphanumeric", a) + run("numeric", d) <= bits; d++) {
+        if (run("alphanumeric", a) + run("numeric", d) === bits) return content(0, a, d);
+      }
+    }
+  };
+
+  const found = padded() ?? unpadded();
+  if (found === undefined)
+    throw new Error(`no mixed content has ${bits} bits at version ${version}`);
+  const encoder = new MixedEncoder(found.text);
+  if (encoder.bitLen(version) !== bits || encoder.segments.length !== found.runs)
+    throw new Error(`runs merged in ${found.text}`);
+  return found.text;
 }
 
-// Same as boundaries, but by exact bit count, plus a cut short terminator
-// with 1 to 3 bits left, which single modes can't reach
 function mixedBoundaries() {
   const cases: Case[] = [];
   for (let version = 1; version <= 40; version++) {
@@ -99,9 +111,9 @@ function mixedBoundaries() {
       const options = pinned("mixed", version, ecl);
       const bits = dataBits(version, ecl);
       cases.push(
+        { ...options, content: exactMixed(version, bits - 1) },
         { ...options, content: exactMixed(version, bits) },
         { ...options, content: exactMixed(version, bits + 1) },
-        { ...options, content: exactMixed(version, bits - 1 - ((version + ecl) % 3)) },
       );
     }
   }
