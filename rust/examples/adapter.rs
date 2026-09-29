@@ -1,5 +1,5 @@
 // Takes [encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content, svg]
-// Gives version-ecl-mask-hash, or the svg if svg is [margin, size, attributes], or an error code.
+// Gives version-ecl-mask-hash, then a space and the svg if svg is [margin, size, attributes], or an error code.
 use std::io::{self, BufRead, Write};
 
 use fuqr::extras::encoders::{AlphanumericEncoder, MixedEncoder, NumericEncoder};
@@ -16,7 +16,7 @@ type Request = (
     u8,
     u8,
     String,
-    Option<(i32, Option<u32>, String)>,
+    Option<(i32, Option<String>, String)>,
 );
 
 fn generate(encoder: &mut dyn Encoder, options: GenerateOptions) -> Result<QrCode, FuqrError> {
@@ -53,21 +53,21 @@ fn answer(
         "mixed" => generate(&mut MixedEncoder::new(&content, &mut scratch), options),
         _ => panic!("bad encoder {encoder}"),
     };
-    match (result, svg) {
-        (Ok(qr), Some((margin, size, attributes))) => {
-            let mut svg = String::new();
-            let size = size.map(|size| size.to_string());
-            let options = SvgOptions {
-                margin,
-                size: size.as_deref(),
-                attributes: &attributes,
-            };
-            render_svg_into(&qr, options, &mut svg).unwrap();
-            svg
-        }
-        (Ok(qr), None) => format!("{}-{}-{}-{:016x}", qr.version, qr.ecl, qr.mask, hash(&qr)),
-        (Err(err), _) => err.code().to_string(),
+    let qr = match result {
+        Ok(qr) => qr,
+        Err(err) => return err.code().to_string(),
+    };
+    let mut answer = format!("{}-{}-{}-{:016x}", qr.version, qr.ecl, qr.mask, hash(&qr));
+    if let Some((margin, size, attributes)) = svg {
+        answer.push(' ');
+        let options = SvgOptions {
+            margin,
+            size: size.as_deref(),
+            attributes: &attributes,
+        };
+        render_svg_into(&qr, options, &mut answer).unwrap();
     }
+    answer
 }
 
 fn main() {
