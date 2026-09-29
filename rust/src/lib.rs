@@ -75,13 +75,17 @@ pub fn generate_with_encoder<const N: usize>(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SvgOptions<'a> {
     pub margin: i32,
+    /// Width and height, as pixels or any CSS length. `None` omits them.
+    pub size: Option<&'a str>,
+    /// Appended to the `<svg>` tag.
     pub attributes: &'a str,
 }
 impl Default for SvgOptions<'_> {
     fn default() -> Self {
         Self {
             margin: 2,
-            attributes: r#"xmlns="http://www.w3.org/2000/svg" width="300" height="300""#,
+            size: Some("300"),
+            attributes: "",
         }
     }
 }
@@ -93,11 +97,18 @@ pub fn render_svg_into<W: fmt::Write, const N: usize>(
 ) -> fmt::Result {
     let margin = options.margin;
     let width = qr.version as i32 * 4 + 17 + 2 * margin;
-    write!(out, "<svg ")?;
-    if !options.attributes.is_empty() {
-        write!(out, "{} ", options.attributes)?;
+    write!(
+        out,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {width} {width}\""
+    )?;
+    if let Some(size) = options.size {
+        write!(out, " width=\"{size}\" height=\"{size}\"")?;
     }
-    write!(out, "viewBox=\"0 0 {width} {width}\">")?;
+    write!(out, " shape-rendering=\"crispEdges\"")?;
+    if !options.attributes.is_empty() {
+        write!(out, " {}", options.attributes)?;
+    }
+    write!(out, ">")?;
     write!(
         out,
         "<rect width=\"{width}\" height=\"{width}\" fill=\"#fff\"/>"

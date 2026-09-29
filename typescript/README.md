@@ -23,7 +23,8 @@ const svg = renderSvg(qr);
 // with options
 const svg = renderSvg(qr, {
   margin: 2,
-  attributes: 'xmlns="http://www.w3.org/2000/svg" width="300px" height="300px"',
+  size: "1000px", // <svg> width and height, "300" by default.
+  attributes: 'class="qr" role="img" aria-label="fuqr repo"', // appended to <svg>
 });
 
 // OR

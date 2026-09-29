@@ -1,14 +1,23 @@
 // Takes [encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content, svg]
-// Gives version-ecl-mask-hash, or the svg path if svg is [margin, scale], or an error code.
+// Gives version-ecl-mask-hash, or the svg if svg is [margin, size, attributes], or an error code.
 use std::io::{self, BufRead, Write};
 
 use fuqr::extras::encoders::{AlphanumericEncoder, MixedEncoder, NumericEncoder};
 use fuqr::{
-    build_svg_path_into, generate_with_encoder, ByteEncoder, Encoder, FuqrError, GenerateOptions,
-    Module, QrCode,
+    generate_with_encoder, render_svg_into, ByteEncoder, Encoder, FuqrError, GenerateOptions,
+    Module, QrCode, SvgOptions,
 };
 
-type Request = (String, u8, u8, u8, u8, u8, String, Option<(i32, i32)>);
+type Request = (
+    String,
+    u8,
+    u8,
+    u8,
+    u8,
+    u8,
+    String,
+    Option<(i32, Option<u32>, String)>,
+);
 
 fn generate(encoder: &mut dyn Encoder, options: GenerateOptions) -> Result<QrCode, FuqrError> {
     generate_with_encoder(encoder, options)
@@ -45,10 +54,16 @@ fn answer(
         _ => panic!("bad encoder {encoder}"),
     };
     match (result, svg) {
-        (Ok(qr), Some((margin, scale))) => {
-            let mut path = String::new();
-            build_svg_path_into(&qr, margin, scale, &mut path).unwrap();
-            path
+        (Ok(qr), Some((margin, size, attributes))) => {
+            let mut svg = String::new();
+            let size = size.map(|size| size.to_string());
+            let options = SvgOptions {
+                margin,
+                size: size.as_deref(),
+                attributes: &attributes,
+            };
+            render_svg_into(&qr, options, &mut svg).unwrap();
+            svg
         }
         (Ok(qr), None) => format!("{}-{}-{}-{:016x}", qr.version, qr.ecl, qr.mask, hash(&qr)),
         (Err(err), _) => err.code().to_string(),
