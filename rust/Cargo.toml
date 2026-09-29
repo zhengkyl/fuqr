@@ -17,3 +17,4 @@ extras = []
 
 [dev-dependencies]
 fuqr = { path = ".", features = ["extras"] }
+serde_json = "1.0.151"

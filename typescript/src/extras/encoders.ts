@@ -101,6 +101,15 @@ for (let i = 0; i < 256; i++) {
   else if (B45_LUT[i] !== 255) MODE[i] = 1;
 }
 
+// Open segment states: numeric with length 1, 2, 0 mod 3, alphanumeric with
+// length 1, 0 mod 2, then byte. Each continues the one before it in its mode.
+const STATE_MODE = [0, 0, 0, 1, 1, 2];
+const PREV = [2, 0, 1, 4, 3, 5];
+const CHAR_BITS = [4, 3, 3, 6, 5, 8];
+// Only a mode's first state opens a segment
+const FIRST = [0, 3, 5];
+const INF = 2 ** 30;
+
 export class MixedEncoder implements Encoder {
   public bytes: Uint8Array;
   public modes: Uint8Array;
@@ -130,6 +139,8 @@ export class MixedEncoder implements Encoder {
     return result.bits;
   }
 
+  // Viterbi over open segment states, exact since a state fixes the bits of the
+  // next char. Fewest bits win, then fewest segments, then the earliest start.
   private segment(version: number) {
     const modes = this.modes;
     const n = modes.length;
@@ -141,110 +152,67 @@ export class MixedEncoder implements Encoder {
       };
     }
 
-    // One mode throughout is optimal as a single segment
-    let mode = modes[0];
-    let i = 1;
-    while (i < n && modes[i] === mode) i++;
-    if (i === n) {
-      return {
-        bits: MODES[mode].segLen(version, n),
-        segments: [{ mode, start: 0, end: n }],
-      };
-    }
+    const headers = MODES.map((m) => 4 + m.cciLen(version));
+    // Best path into each state as bits, segment count, and segment start
+    let [bits, count, start] = [0, 0, 0].map(() => new Int32Array(6).fill(INF));
+    let [nextBits, nextCount, nextStart] = [0, 0, 0].map(() => new Int32Array(6));
+    // Low 3 bits are the best state at i, then 1 bit per mode if it opened at i
+    const trace = new Uint8Array(n);
+    let closedBits = 0;
+    let closedCount = 0;
 
-    // Costs are in sixths of a bit
-    // numeric 20, alphanumeric 33, byte 48. Segments round up when closed.
+    for (let i = 0; i < n; i++) {
+      let best = 0;
+      for (let k = 0; k < 6; k++) {
+        const mode = STATE_MODE[k];
+        const p = PREV[k];
+        nextBits[k] = modes[i] > mode ? INF : bits[p] + CHAR_BITS[k];
+        nextCount[k] = count[p];
+        nextStart[k] = start[p];
 
-    // header + first char
-    const start0 = (4 + NumericMode.cciLen(version)) * 6 + 20;
-    const start1 = (4 + AlphanumericMode.cciLen(version)) * 6 + 33;
-    const start2 = (4 + ByteMode.cciLen(version)) * 6 + 48;
-
-    // prev[i] packs the mode at i - 1 for each mode at i, 2 bits per mode
-    const prev = new Uint8Array(n);
-
-    let c0 = mode === 0 ? start0 : Infinity;
-    let c1 = mode <= 1 ? start1 : Infinity;
-    let c2 = start2;
-
-    for (i = 1; i < n; i++) {
-      mode = modes[i];
-
-      // byte mode shortcut for url-like input
-      if (mode === 2 && c0 === Infinity && c1 === Infinity) {
-        c2 += 48;
-        prev[i] = 2 << 4;
-        continue;
-      }
-
-      // Cost of closing a segment in each mode
-      const r0 = Math.ceil(c0 / 6) * 6;
-      const r1 = Math.ceil(c1 / 6) * 6;
-      const r2 = Math.ceil(c2 / 6) * 6;
-      let p = 0;
-
-      // Staying wins ties to avoid pointless segments
-      // Switching to the same mode is never better than staying
-      if (mode === 0) {
-        const from = r1 <= r2 ? 1 : 2;
-        const swap = (from === 1 ? r1 : r2) + start0;
-        const stay = c0 + 20;
-        if (stay <= swap) {
-          c0 = stay;
-        } else {
-          c0 = swap;
-          p = from;
+        // Continuing starts earlier, so opening must be strictly better
+        const open = closedBits + headers[mode] + CHAR_BITS[k];
+        if (
+          k === FIRST[mode] &&
+          modes[i] <= mode &&
+          (open < nextBits[k] || (open === nextBits[k] && closedCount + 1 < nextCount[k]))
+        ) {
+          nextBits[k] = open;
+          nextCount[k] = closedCount + 1;
+          nextStart[k] = i;
+          trace[i] |= 8 << mode;
         }
-      } else {
-        c0 = Infinity;
-      }
 
-      if (mode <= 1) {
-        const from = r0 <= r2 ? 0 : 2;
-        const swap = (from === 0 ? r0 : r2) + start1;
-        const stay = c1 + 33;
-        if (stay <= swap) {
-          c1 = stay;
-          p |= 1 << 2;
-        } else {
-          c1 = swap;
-          p |= from << 2;
-        }
-      } else {
-        c1 = Infinity;
+        const d =
+          nextBits[k] - nextBits[best] ||
+          nextCount[k] - nextCount[best] ||
+          nextStart[k] - nextStart[best];
+        if (d < 0) best = k;
       }
-
-      const from = r0 <= r1 ? 0 : 1;
-      const swap = (from === 0 ? r0 : r1) + start2;
-      const stay = c2 + 48;
-      if (stay <= swap) {
-        c2 = stay;
-        p |= 2 << 4;
-      } else {
-        c2 = swap;
-        p |= from << 4;
-      }
-
-      prev[i] = p;
+      trace[i] |= best;
+      closedBits = nextBits[best];
+      closedCount = nextCount[best];
+      [bits, nextBits] = [nextBits, bits];
+      [count, nextCount] = [nextCount, count];
+      [start, nextStart] = [nextStart, start];
     }
-
-    let m = c0 <= c1 ? (c0 <= c2 ? 0 : 2) : c1 <= c2 ? 1 : 2;
-    const bits = Math.ceil((m === 0 ? c0 : m === 1 ? c1 : c2) / 6);
 
     const segments: Segment[] = [];
+    let k = trace[n - 1] & 7;
     let end = n;
-    for (let i = n - 1; i >= 1; i--) {
-      const p = (prev[i] >> (m * 2)) & 0b11;
-      if (p !== m) {
-        segments.push({ mode: m, start: i, end });
+    for (let i = n - 1; i >= 0; i--) {
+      const mode = STATE_MODE[k];
+      if (k === FIRST[mode] && trace[i] & (8 << mode)) {
+        segments.push({ mode, start: i, end });
         end = i;
-        m = p;
+        k = trace[i - 1] & 7;
+      } else {
+        k = PREV[k];
       }
     }
-    segments.push({ mode: m, start: 0, end });
     segments.reverse();
 
-    return { bits, segments };
+    return { bits: closedBits, segments };
   }
 
   encode(version: number, push: (bits: number, len: number) => void) {

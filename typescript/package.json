@@ -26,10 +26,6 @@
     }
   },
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run"
-  },
-  "devDependencies": {
-    "vitest": "^5.0.1"
+    "build": "tsc"
   }
 }

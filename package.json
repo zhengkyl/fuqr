@@ -4,9 +4,9 @@
   "scripts": {
     "build:ts": "pnpm -F fuqr build",
     "examples": "ls examples/*.ts | xargs -I {} node {}",
-    "test": "pnpm -F fuqr test",
-    "gen:fixtures": "node helpers/fixtures.ts",
-    "fuzz": "node helpers/fuzz.ts",
+    "test": "pnpm test:ts && pnpm test:rust",
+    "test:ts": "node helpers/test.ts node typescript/tests/adapter.ts",
+    "test:rust": "cargo build -q --release --manifest-path rust/Cargo.toml --example adapter && node helpers/test.ts rust/target/release/examples/adapter",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"
   },
