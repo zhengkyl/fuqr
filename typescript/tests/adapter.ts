@@ -1,8 +1,9 @@
-// Takes [encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content]
-// Gives version-ecl-mask-hash or an error code.
+// Takes [encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content, svg]
+// Gives version-ecl-mask-hash, or the svg path if svg is [margin, scale], or an error code.
 import { createInterface } from "node:readline";
 import { AlphanumericEncoder, MixedEncoder, NumericEncoder } from "../src/extras/encoders.ts";
 import {
+  buildSvgPath,
   ByteEncoder,
   FuqrError,
   type GenerateOptions,
@@ -17,7 +18,16 @@ const ENCODERS = {
   mixed: MixedEncoder,
 };
 
-type Request = [keyof typeof ENCODERS, number, number, number, number, number, string];
+type Request = [
+  keyof typeof ENCODERS,
+  number,
+  number,
+  number,
+  number,
+  number,
+  string,
+  [number, number] | null,
+];
 
 // FNV-1a 64 of dark modules as 0 or 1, as two 32 bit halves. Prime is 2^40 + 0x1b3.
 function hash(matrix: Uint8Array) {
@@ -32,10 +42,11 @@ function hash(matrix: Uint8Array) {
   return hi.toString(16).padStart(8, "0") + lo.toString(16).padStart(8, "0");
 }
 
-function answer([encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content]: Request) {
+function answer([encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content, svg]: Request) {
   const options = { minVersion, maxVersion, minEcl, maxEcl, mask } as GenerateOptions;
   try {
     const qr = generateWithEncoder(new ENCODERS[encoder](content), options);
+    if (svg !== null) return buildSvgPath(qr, ...svg);
     return `${qr.version}-${qr.ecl}-${qr.mask}-${hash(qr.matrix)}`;
   } catch (err) {
     if (err instanceof FuqrError) return err.code;

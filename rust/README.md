@@ -32,7 +32,7 @@ let qr = generate::<{ modules_for(6) }>(content, options)?;
 let qr = generate::<{ modules_for(13) }>(content, options)?;
 ```
 
-`render_svg_into()`'s stack use also scales with the same parameter.
+`render_svg_into()` and `build_svg_path_into()` stack use also scales with the same parameter.
 
 ### Advanced
 

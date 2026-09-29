@@ -158,6 +158,95 @@ async function scan(content: string, qr: Expected["qr"]) {
   return `zxing scanned ${JSON.stringify(scanned)}`;
 }
 
+// ---- SVG rendering ----
+
+// Obviously correct path with one clockwise square per dark module
+function squaresPath(
+  { modules, width }: NonNullable<Expected["qr"]>,
+  margin: number,
+  scale: number,
+) {
+  let d = "";
+  for (let y = 0; y < width; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!modules[y * width + x]) continue;
+      d += `M${(x + margin) * scale},${(y + margin) * scale}h${scale}v${scale}h${-scale}z`;
+    }
+  }
+  return d;
+}
+
+// Fills an integer M, h, v, z path with the nonzero rule at pixel centers,
+// clipped to a size x size canvas. Throws on anything else.
+function rasterize(d: string, size: number) {
+  // Winding change at each column where a vertical edge crosses a row
+  const winding = new Int32Array(size * (size + 1));
+  const vertical = (x: number, y0: number, y1: number) => {
+    const col = Math.min(Math.max(x, 0), size);
+    for (let row = Math.max(Math.min(y0, y1), 0); row < Math.min(Math.max(y0, y1), size); row++) {
+      winding[row * (size + 1) + col] += Math.sign(y1 - y0);
+    }
+  };
+
+  let [x, y, startX, startY] = [0, 0, 0, 0];
+  // Fills close open subpaths too
+  const close = () => {
+    if (x !== startX && y !== startY) throw new Error(`diagonal close from ${x},${y}`);
+    vertical(x, y, startY);
+    [x, y] = [startX, startY];
+  };
+  const tokens = d.match(/[a-zA-Z]|[^a-zA-Z,\s]+/g) ?? [];
+  const number = (i: number) => {
+    const n = Number(tokens[i]);
+    if (!Number.isInteger(n)) throw new Error(`bad number ${tokens[i]}`);
+    return n;
+  };
+  for (let i = 0; i < tokens.length; ) {
+    const command = tokens[i++];
+    if (command === "M") {
+      close();
+      [x, y] = [number(i++), number(i++)];
+      [startX, startY] = [x, y];
+    } else if (command === "h") {
+      x += number(i++);
+    } else if (command === "v") {
+      vertical(x, y, (y += number(i++)));
+    } else if (command === "z") {
+      close();
+    } else {
+      throw new Error(`unsupported command ${command}`);
+    }
+  }
+  close();
+
+  const pixels = new Uint8Array(size * size);
+  for (let row = 0; row < size; row++) {
+    let sum = 0;
+    for (let col = 0; col < size; col++) {
+      sum += winding[row * (size + 1) + col];
+      pixels[row * size + col] = +(sum !== 0);
+    }
+  }
+  return pixels;
+}
+
+// Compares a port's path to squaresPath() pixel by pixel, returning what is wrong or ""
+function compareSvg(qr: NonNullable<Expected["qr"]>, margin: number, scale: number, d: string) {
+  const size = (qr.width + 2 * margin) * scale;
+  let got;
+  try {
+    got = rasterize(d, size);
+  } catch (err) {
+    return (err as Error).message;
+  }
+  const want = rasterize(squaresPath(qr, margin, scale), size);
+  const diff = [...got.keys()].filter((i) => got[i] !== want[i]);
+  if (diff.length === 0) return "";
+  const x = Math.floor((diff[0] % size) / scale) - margin;
+  const y = Math.floor(Math.floor(diff[0] / size) / scale) - margin;
+  return `${diff.length} pixels differ, first in module ${x},${y}`;
+}
+
 // ---- Adapter process ----
 
 class Adapter {
@@ -176,10 +265,11 @@ class Adapter {
     });
   }
 
-  ask(request: Case) {
+  // svg is [margin, scale] to get the port's svg path instead of a hash
+  ask(request: Case, svg: [number, number] | null = null) {
     return new Promise<string>((resolve) => {
       this.waiting.push({ request, resolve });
-      this.process.stdin.write(JSON.stringify(request) + "\n");
+      this.process.stdin.write(JSON.stringify([...request, svg]) + "\n");
     });
   }
 
@@ -232,7 +322,10 @@ async function run(adapter: Adapter, name: string, cases: Iterable<Case>, verify
     if (pending.length >= 1000) await Promise.all(pending.splice(0));
   }
   await Promise.all(pending);
+  report(name, count, failures);
+}
 
+function report(name: string, count: number, failures: string[]) {
   if (failures.length === 0) {
     console.log(`${name}: ${count} ok`);
     return;
@@ -240,6 +333,37 @@ async function run(adapter: Adapter, name: string, cases: Iterable<Case>, verify
   failed = true;
   console.log(`${name}: ${failures.length} of ${count} failed`);
   console.log(failures.slice(0, 5).join("\n"));
+}
+
+// [margin, scale]. Zero margin puts edges on the canvas border.
+const SVG_OPTIONS: [number, number][] = [
+  [0, 1],
+  [2, 1],
+  [1, 2],
+  [4, 3],
+];
+
+// Checks svg paths of cases that fit. Assumes the port's matrix matches node-qrcode,
+// which the other suites check.
+async function runSvg(adapter: Adapter, name: string, cases: Iterable<Case>) {
+  const failures: string[] = [];
+  const pending: Promise<void>[] = [];
+  let count = 0;
+  for (const request of cases) {
+    const { qr } = expected(request);
+    if (qr === undefined) continue;
+    const [margin, scale] = SVG_OPTIONS[count++ % SVG_OPTIONS.length];
+    pending.push(
+      adapter.ask(request, [margin, scale]).then((d) => {
+        const error = compareSvg(qr, margin, scale, d);
+        if (error === "") return;
+        const shown = JSON.stringify([...request.slice(0, 6), request[6].slice(0, 80)]);
+        failures.push(`    ${shown}\n      margin ${margin}, scale ${scale}: ${error}`);
+      }),
+    );
+  }
+  await Promise.all(pending);
+  report(name, count, failures);
 }
 
 const LITERALS: Record<Encoder, string[]> = {
@@ -424,6 +548,12 @@ function* randomBoundaries(): Generator<Case> {
   }
 }
 
+// Every version, some with each mask and ecl
+function* svgCases() {
+  yield* literals();
+  yield* boundaries();
+}
+
 const command = process.argv.slice(2);
 if (command[0] === "--") command.shift();
 const adapter = new Adapter(command);
@@ -434,5 +564,6 @@ await run(adapter, "boundaries", boundaries(), true);
 await run(adapter, "exhaustive", exhaustive());
 await run(adapter, "random", random());
 await run(adapter, "random boundaries", randomBoundaries());
+await runSvg(adapter, "svg", svgCases());
 adapter.close();
 if (failed) process.exitCode = 1;
