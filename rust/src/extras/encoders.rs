@@ -137,6 +137,14 @@ const MODE: [u8; 256] = {
     table
 };
 
+// Open segment states: numeric with length 1, 2, 0 mod 3, alphanumeric with
+// length 1, 0 mod 2, then byte. Each continues the one before it in its mode.
+const STATE_MODE: [u8; 6] = [0, 0, 0, 1, 1, 2];
+const PREV: [usize; 6] = [2, 0, 1, 4, 3, 5];
+const CHAR_BITS: [usize; 6] = [4, 3, 3, 6, 5, 8];
+// Only a mode's first state opens a segment
+const FIRST: [usize; 3] = [0, 3, 5];
+
 const UNKNOWN: usize = usize::MAX;
 const INF: usize = usize::MAX / 4;
 
@@ -169,117 +177,76 @@ impl<'a> MixedEncoder<'a> {
         }
     }
 
-    // Costs are in sixths of a bit so each char has a fixed cost:
-    // numeric 20, alphanumeric 33, byte 48. Segments round up when closed.
+    // Viterbi over open segment states, exact since a state fixes the bits of the
+    // next char. Fewest bits win, then fewest segments, then the earliest start.
     fn segment(&mut self, version: Version) -> usize {
         let bytes = self.bytes;
-        let modes = &mut *self.modes;
+        let trace = &mut *self.modes;
         let n = bytes.len();
 
         if n == 0 {
             return ByteMode.seg_len(0, version);
         }
 
-        // One mode throughout is optimal as a single segment
-        let first = MODE[bytes[0] as usize];
-        if bytes.iter().all(|&b| MODE[b as usize] == first) {
-            modes.fill(first);
+        let headers = [
+            4 + NumericMode.cci_len(version) as usize,
+            4 + AlphanumericMode.cci_len(version) as usize,
+            4 + ByteMode.cci_len(version) as usize,
+        ];
+        // Best path into each state as (bits, segment count, segment start)
+        let mut paths = [(INF, 0, 0); 6];
+        let mut closed = (0, 0);
 
-            return match first {
-                0 => NumericMode.seg_len(n, version),
-                1 => AlphanumericMode.seg_len(n, version),
-                _ => ByteMode.seg_len(n, version),
+        // Low 3 bits are the best state at i, then 1 bit per mode if it opened at i
+        for i in 0..n {
+            let byte_mode = MODE[bytes[i] as usize];
+            let prev = paths;
+            let mut t = 0;
+            let mut best = 0;
+            for k in 0..6 {
+                let mode = STATE_MODE[k];
+                let (bits, count, start) = prev[PREV[k]];
+                let bits = if byte_mode > mode {
+                    INF
+                } else {
+                    bits + CHAR_BITS[k]
+                };
+                paths[k] = (bits, count, start);
+
+                // Continuing starts earlier, so opening must be strictly better
+                let open = (
+                    closed.0 + headers[mode as usize] + CHAR_BITS[k],
+                    closed.1 + 1,
+                    i,
+                );
+                if k == FIRST[mode as usize] && byte_mode <= mode && open < paths[k] {
+                    paths[k] = open;
+                    t |= 8 << mode;
+                }
+
+                if paths[k] < paths[best] {
+                    best = k;
+                }
+            }
+            trace[i] = t | best as u8;
+            closed = (paths[best].0, paths[best].1);
+        }
+
+        // Replace the trace with the chosen mode of each byte
+        let mut k = (trace[n - 1] & 7) as usize;
+        for i in (1..n).rev() {
+            let mode = STATE_MODE[k];
+            let opened = k == FIRST[mode as usize] && trace[i] & (8 << mode) != 0;
+            trace[i] = mode;
+            k = if opened {
+                (trace[i - 1] & 7) as usize
+            } else {
+                PREV[k]
             };
         }
+        trace[0] = STATE_MODE[k];
 
-        // header + first char
-        let start0 = (4 + NumericMode.cci_len(version) as usize) * 6 + 20;
-        let start1 = (4 + AlphanumericMode.cci_len(version) as usize) * 6 + 33;
-        let start2 = (4 + ByteMode.cci_len(version) as usize) * 6 + 48;
-
-        let mut c0 = if first == 0 { start0 } else { INF };
-        let mut c1 = if first <= 1 { start1 } else { INF };
-        let mut c2 = start2;
-
-        // modes[i] packs the mode at i - 1 for each mode at i, 2 bits per mode
-        for i in 1..n {
-            let mode = MODE[bytes[i] as usize];
-
-            // byte mode shortcut for url-like input
-            if mode == 2 && c0 == INF && c1 == INF {
-                c2 += 48;
-                modes[i] = 2 << 4;
-                continue;
-            }
-
-            // Cost of closing a segment in each mode
-            let r0 = c0.div_ceil(6) * 6;
-            let r1 = c1.div_ceil(6) * 6;
-            let r2 = c2.div_ceil(6) * 6;
-            let mut p = 0;
-
-            // Staying wins ties to avoid pointless segments
-            if mode == 0 {
-                let (from, r) = if r1 <= r2 { (1, r1) } else { (2, r2) };
-                let stay = c0 + 20;
-                if stay <= r + start0 {
-                    c0 = stay;
-                } else {
-                    c0 = r + start0;
-                    p = from;
-                }
-            } else {
-                c0 = INF;
-            }
-
-            if mode <= 1 {
-                let (from, r) = if r0 <= r2 { (0, r0) } else { (2, r2) };
-                let stay = c1 + 33;
-                if stay <= r + start1 {
-                    c1 = stay;
-                    p |= 1 << 2;
-                } else {
-                    c1 = r + start1;
-                    p |= from << 2;
-                }
-            } else {
-                c1 = INF;
-            }
-
-            let (from, r) = if r0 <= r1 { (0, r0) } else { (1, r1) };
-            let stay = c2 + 48;
-            if stay <= r + start2 {
-                c2 = stay;
-                p |= 2 << 4;
-            } else {
-                c2 = r + start2;
-                p |= from << 4;
-            }
-
-            modes[i] = p;
-        }
-
-        let (mut m, cost) = if c0 <= c1 {
-            if c0 <= c2 {
-                (0, c0)
-            } else {
-                (2, c2)
-            }
-        } else if c1 <= c2 {
-            (1, c1)
-        } else {
-            (2, c2)
-        };
-
-        // Replace packed modes with the chosen mode of each byte
-        for i in (1..n).rev() {
-            let p = (modes[i] >> (m * 2)) & 0b11;
-            modes[i] = m;
-            m = p;
-        }
-        modes[0] = m;
-
-        cost.div_ceil(6)
+        closed.0
     }
 }
 impl<'a> Encoder for MixedEncoder<'a> {
