@@ -1,5 +1,5 @@
 // Takes [encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content, svg]
-// Gives version-ecl-mask-hash, or the svg if svg is [margin, size, attributes], or an error code.
+// Gives version-ecl-mask-hash, then a space and the svg if svg is [margin, size, attributes] or an error code.
 import { createInterface } from "node:readline";
 import { AlphanumericEncoder, MixedEncoder, NumericEncoder } from "../src/extras/encoders.ts";
 import {
@@ -26,7 +26,7 @@ type Request = [
   number,
   number,
   string,
-  [number, number | null, string] | null,
+  [number, string | null, string] | null,
 ];
 
 // FNV-1a 64 of dark modules as 0 or 1, as two 32 bit halves. Prime is 2^40 + 0x1b3.
@@ -46,8 +46,9 @@ function answer([encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content,
   const options = { minVersion, maxVersion, minEcl, maxEcl, mask } as GenerateOptions;
   try {
     const qr = generateWithEncoder(new ENCODERS[encoder](content), options);
-    if (svg !== null) return renderSvg(qr, { margin: svg[0], size: svg[1], attributes: svg[2] });
-    return `${qr.version}-${qr.ecl}-${qr.mask}-${hash(qr.matrix)}`;
+    const answer = `${qr.version}-${qr.ecl}-${qr.mask}-${hash(qr.matrix)}`;
+    if (svg === null) return answer;
+    return `${answer} ${renderSvg(qr, { margin: svg[0], size: svg[1], attributes: svg[2] })}`;
   } catch (err) {
     if (err instanceof FuqrError) return err.code;
     throw err;
