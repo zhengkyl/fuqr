@@ -259,7 +259,7 @@ export function determineDetails(encoder: Encoder, options: GenerateOptions = {}
     }
   }
 
-  throw new FuqrError("TEXT_TOO_LONG", `Cannot fit in version ${maxVersion}`);
+  throw new FuqrError("CONTENT_TOO_LONG", `Cannot fit in version ${maxVersion}`);
 }
 
 export function encodeMessage(encoder: Encoder, details: Details): Message {

@@ -68,7 +68,7 @@ impl<'a> NumericEncoder<'a> {
     pub fn new(content: &'a str) -> Result<Self, FuqrError> {
         let bytes = content.as_bytes();
         if !bytes.iter().all(u8::is_ascii_digit) {
-            return Err(FuqrError::InvalidEncoding {
+            return Err(FuqrError::EncodingFailure {
                 message: "Content is not numeric",
             });
         }
@@ -104,7 +104,7 @@ impl<'a> AlphanumericEncoder<'a> {
     pub fn new(content: &'a str) -> Result<Self, FuqrError> {
         let bytes = content.as_bytes();
         if bytes.iter().any(|&b| B45_LUT[b as usize] == 255) {
-            return Err(FuqrError::InvalidEncoding {
+            return Err(FuqrError::EncodingFailure {
                 message: "Content is not alphanumeric",
             });
         }

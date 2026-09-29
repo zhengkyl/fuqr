@@ -252,24 +252,24 @@ pub struct Details {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FuqrError {
-    TextTooLong { max_version: Version },
-    InvalidEncoding { message: &'static str },
+    ContentTooLong { max_version: Version },
+    EncodingFailure { message: &'static str },
 }
 impl FuqrError {
     pub fn code(&self) -> &'static str {
         match self {
-            Self::TextTooLong { .. } => "TEXT_TOO_LONG",
-            Self::InvalidEncoding { .. } => "INVALID_ENCODING",
+            Self::ContentTooLong { .. } => "CONTENT_TOO_LONG",
+            Self::EncodingFailure { .. } => "ENCODING_FAILURE",
         }
     }
 }
 impl fmt::Display for FuqrError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TextTooLong { max_version } => {
+            Self::ContentTooLong { max_version } => {
                 write!(f, "Cannot fit in version {max_version}")
             }
-            Self::InvalidEncoding { message } => f.write_str(message),
+            Self::EncodingFailure { message } => f.write_str(message),
         }
     }
 }
@@ -357,7 +357,7 @@ pub fn determine_details(
         }
     }
 
-    Err(FuqrError::TextTooLong {
+    Err(FuqrError::ContentTooLong {
         max_version: options.max_version,
     })
 }

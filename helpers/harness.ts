@@ -146,7 +146,7 @@ function expected([encoder, minVersion, maxVersion, minEcl, maxEcl, mask, conten
   // Segmentation only changes with char count indicator lengths
   const cache: (Segment[] | null)[] = [];
   const segmentsAt = (v: number) => (cache[group(v)] ??= expectedSegments(encoder, bytes, v));
-  if (segmentsAt(1) === null) return { answer: "INVALID_ENCODING" };
+  if (segmentsAt(1) === null) return { answer: "ENCODING_FAILURE" };
 
   // First version that fits, then the highest ecl that still fits
   const fits = (v: number, ecl: number) =>
@@ -154,7 +154,7 @@ function expected([encoder, minVersion, maxVersion, minEcl, maxEcl, mask, conten
     8 * DATA_CODEWORDS[v][ecl];
   let version = minVersion;
   while (version <= maxVersion && !fits(version, minEcl)) version++;
-  if (version > maxVersion) return { answer: "TEXT_TOO_LONG" };
+  if (version > maxVersion) return { answer: "CONTENT_TOO_LONG" };
   let ecl = minEcl;
   while (ecl < maxEcl && fits(version, ecl + 1)) ecl++;
 
