@@ -81,7 +81,7 @@ impl Default for SvgOptions<'_> {
     fn default() -> Self {
         Self {
             margin: 2,
-            attributes: r#"xmlns="http://www.w3.org/2000/svg" width="300px" height="300px""#,
+            attributes: r#"xmlns="http://www.w3.org/2000/svg" width="300" height="300""#,
         }
     }
 }
@@ -91,51 +91,8 @@ pub fn render_svg_into<W: fmt::Write, const N: usize>(
     options: SvgOptions,
     out: &mut W,
 ) -> fmt::Result {
-    let stride = qr.version as usize * 4 + 17;
-    let edges = stride + 1;
     let margin = options.margin;
-
-    const RIGHT: u8 = 0;
-    const DOWN: u8 = 1;
-    const LEFT: u8 = 2;
-    const UP: u8 = 3;
-    let neighbor = |node: usize, dir: u8| match dir {
-        RIGHT => node + edges,
-        DOWN => node + 1,
-        LEFT => node - edges,
-        _ => node - 1,
-    };
-
-    // Outgoing edge directions per corner node (node = x * edges + y), one
-    // 4-bit nibble per node, two nodes per byte: (stride + 1)^2 nibbles always
-    // fit in the N >= stride^2 bytes the matrix itself needs. Adding an edge
-    // cancels the opposite edge if present, so only contour edges survive.
-    let mut next = [0u8; N];
-    let bit = |node: usize, dir: u8| 1u8 << (dir + ((node as u8 & 1) << 2));
-    let add_edge = |next: &mut [u8; N], from: usize, dir: u8| {
-        let to = neighbor(from, dir);
-        let back = bit(to, dir ^ 2);
-        if next[to >> 1] & back != 0 {
-            next[to >> 1] &= !back;
-        } else {
-            next[from >> 1] |= bit(from, dir);
-        }
-    };
-
-    for y in 0..stride {
-        for x in 0..stride {
-            if qr.matrix[y * stride + x] & Module::ON == 0 {
-                continue;
-            }
-            let tl = x * edges + y;
-            add_edge(&mut next, tl, RIGHT);
-            add_edge(&mut next, tl + edges, DOWN);
-            add_edge(&mut next, tl + edges + 1, LEFT);
-            add_edge(&mut next, tl + 1, UP);
-        }
-    }
-
-    let width = stride as i32 + 2 * margin;
+    let width = qr.version as i32 * 4 + 17 + 2 * margin;
     write!(out, "<svg ")?;
     if !options.attributes.is_empty() {
         write!(out, "{} ", options.attributes)?;
@@ -146,45 +103,83 @@ pub fn render_svg_into<W: fmt::Write, const N: usize>(
         "<rect width=\"{width}\" height=\"{width}\" fill=\"#fff\"/>"
     )?;
     write!(out, "<path fill=\"#000\" d=\"")?;
+    build_svg_path_into(qr, margin, 1, out)?;
+    write!(out, "\"/></svg>")
+}
 
-    let nibble = |next: &[u8; N], node: usize| (next[node >> 1] >> ((node as u8 & 1) << 2)) & 0xF;
-    for start in 0..edges * edges {
-        if nibble(&next, start) == 0 {
-            continue;
-        }
+/// Writes the `d` attribute of a path tracing every dark region clockwise.
+pub fn build_svg_path_into<W: fmt::Write, const N: usize>(
+    qr: &QrCode<N>,
+    margin: i32,
+    scale: i32,
+    out: &mut W,
+) -> fmt::Result {
+    let stride = qr.version as usize * 4 + 17;
+    let dark = |x: usize, y: usize| {
+        x < stride && y < stride && qr.matrix[y * stride + x] & Module::ON != 0
+    };
+
+    // One nibble per corner, so (stride + 1)^2 corners fit in N >= stride^2 bytes.
+    let edges = stride + 1;
+    let mut corners = [0u8; N];
+    for node in 0..edges * edges {
+        let (x, y) = (node % edges, node / edges);
+        let (tl, tr) = (
+            dark(x.wrapping_sub(1), y.wrapping_sub(1)),
+            dark(x, y.wrapping_sub(1)),
+        );
+        let (bl, br) = (dark(x.wrapping_sub(1), y), dark(x, y));
+        let dirs = (br && !tr) as u8
+            | ((bl && !br) as u8) << 1
+            | ((tl && !bl) as u8) << 2
+            | ((tr && !tl) as u8) << 3;
+        corners[node / 2] |= dirs << (node % 2 * 4);
+    }
+    let dirs = |next: &[u8; N], node: usize| next[node / 2] >> (node % 2 * 4) & 0xF;
+
+    let steps = [1, edges as isize, -1, -(edges as isize)];
+    let line = |out: &mut W, dir: usize, run: i32| {
+        let run = if dir < 2 { run } else { -run };
         write!(
             out,
-            "M{},{}",
-            margin + (start / edges) as i32,
-            margin + (start % edges) as i32
-        )?;
+            "{}{}",
+            if dir & 1 == 1 { 'v' } else { 'h' },
+            run * scale
+        )
+    };
+    for start in 0..edges * edges {
+        if dirs(&corners, start) == 0 {
+            continue;
+        }
+        let x = (start % edges) as i32 + margin;
+        let y = (start / edges) as i32 + margin;
+        write!(out, "M{},{}", x * scale, y * scale)?;
 
-        let mut curr = start;
-        let mut dir = u8::MAX;
-        let mut run = 0i32;
+        // At a corner with two ways out, the lowest direction bit wins
+        let mut node = start;
+        let mut prev = usize::MAX;
+        let mut run = 0;
         loop {
-            let d = nibble(&next, curr).trailing_zeros() as u8;
-            next[curr >> 1] &= !bit(curr, d);
-
-            let step = if d < 2 { 1 } else { -1 };
-            if d == dir {
-                run += step;
+            let dir = dirs(&corners, node).trailing_zeros() as usize;
+            corners[node / 2] &= !(1 << (dir + node % 2 * 4));
+            if dir == prev {
+                run += 1;
             } else {
-                if dir != u8::MAX {
-                    write!(out, "{}{}", if dir & 1 == 0 { 'h' } else { 'v' }, run)?;
+                if prev != usize::MAX {
+                    line(out, prev, run)?;
                 }
-                dir = d;
-                run = step;
+                prev = dir;
+                run = 1;
             }
-            curr = neighbor(curr, d);
-            if curr == start {
+            node = node.wrapping_add_signed(steps[dir]);
+            if node == start {
                 break;
             }
         }
-        write!(out, "{}{}z", if dir & 1 == 0 { 'h' } else { 'v' }, run)?;
+        line(out, prev, run)?;
+        write!(out, "z")?;
     }
-
-    write!(out, "\"/></svg>")
+    Ok(())
 }
 
 pub struct Module;
@@ -230,7 +225,9 @@ pub trait Mode {
     fn indicator(&self) -> u16;
     fn cci_len(&self, version: Version) -> u8;
     /// Bits for one segment of `len` chars, including its header.
-    fn seg_len(&self, len: usize, version: Version) -> usize;
+    fn seg_len(&self, version: Version, len: usize) -> usize;
+    /// Pushes one segment of `bytes`, including its header.
+    fn encode_utf8(&self, version: Version, bytes: &[u8], push: &mut dyn FnMut(u16, u8));
 }
 
 /// Generation parameters, seeded from [`GenerateOptions`] and settled during
@@ -293,8 +290,15 @@ impl Mode for ByteMode {
             16
         }
     }
-    fn seg_len(&self, len: usize, version: Version) -> usize {
+    fn seg_len(&self, version: Version, len: usize) -> usize {
         4 + self.cci_len(version) as usize + len * 8
+    }
+    fn encode_utf8(&self, version: Version, bytes: &[u8], push: &mut dyn FnMut(u16, u8)) {
+        push(self.indicator(), 4);
+        push(bytes.len() as u16, self.cci_len(version));
+        for &b in bytes {
+            push(b as u16, 8);
+        }
     }
 }
 
@@ -311,14 +315,10 @@ impl<'a> ByteEncoder<'a> {
 }
 impl<'a> Encoder for ByteEncoder<'a> {
     fn bit_len(&mut self, version: Version) -> usize {
-        ByteMode.seg_len(self.bytes.len(), version)
+        ByteMode.seg_len(version, self.bytes.len())
     }
     fn encode(&mut self, version: Version, push: &mut dyn FnMut(u16, u8)) {
-        push(ByteMode.indicator(), 4);
-        push(self.bytes.len() as u16, ByteMode.cci_len(version));
-        for &b in self.bytes {
-            push(b as u16, 8);
-        }
+        ByteMode.encode_utf8(version, self.bytes, push);
     }
 }
 

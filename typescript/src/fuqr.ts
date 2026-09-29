@@ -106,70 +106,52 @@ export function buildSvgPath(
   scale: number,
 ) {
   const stride = qr.version * 4 + 17;
-  const edges = stride + 1;
-
-  const next = new Map<number, number[]>();
-  const addEdge = (x1: number, y1: number, x2: number, y2: number) => {
-    const from = x1 * edges + y1;
-    const to = x2 * edges + y2;
-    const back = next.get(to);
-    if (back) {
-      const i = back.indexOf(from);
-      if (i !== -1) {
-        if (back.length === 1) {
-          next.delete(to);
-        } else {
-          back.splice(i, 1);
-        }
-        return;
-      }
-    }
-    const list = next.get(from);
-    if (list) list.push(to);
-    else next.set(from, [to]);
+  const dark = (x: number, y: number) => {
+    if (x < 0 || y < 0 || x >= stride || y >= stride) return false;
+    return (qr.matrix[y * stride + x] & Module.ON) !== 0;
   };
 
-  for (let y = 0; y < stride; y++) {
-    for (let x = 0; x < stride; x++) {
-      if ((qr.matrix[y * stride + x] & Module.ON) === 0) continue;
-      addEdge(x, y, x + 1, y);
-      addEdge(x + 1, y, x + 1, y + 1);
-      addEdge(x + 1, y + 1, x, y + 1);
-      addEdge(x, y + 1, x, y);
+  const edges = stride + 1;
+  const corners = new Uint8Array(edges * edges);
+  for (let y = 0; y < edges; y++) {
+    for (let x = 0; x < edges; x++) {
+      const tl = dark(x - 1, y - 1);
+      const tr = dark(x, y - 1);
+      const bl = dark(x - 1, y);
+      const br = dark(x, y);
+      // store "clockwise" paths from this corner
+      corners[y * edges + x] =
+        +(br && !tr) | (+(bl && !br) << 1) | (+(tl && !bl) << 2) | (+(tr && !tl) << 3);
     }
   }
 
+  const dirOffsets = [1, edges, -1, -edges];
+  const line = (dir: number, run: number) =>
+    `${dir & 1 ? "v" : "h"}${(dir < 2 ? run : -run) * scale}`;
   let d = "";
-  for (const start of [...next.keys()]) {
-    if (!next.has(start)) continue;
+  for (let start = 0; start < corners.length; start++) {
+    if (corners[start] === 0) continue;
+    const x = (start % edges) + margin;
+    const y = Math.floor(start / edges) + margin;
+    d += `M${x * scale},${y * scale}`;
 
-    const mx = margin + Math.floor(start / edges);
-    const my = margin + (start % edges);
-    d += `M${mx * scale},${my * scale}`;
-
-    let dx = 0;
-    let dy = 0;
-    let run = 0;
     let curr = start;
+    let prev = -1;
+    let run = 0;
     do {
-      const list = next.get(curr)!;
-      const to = list.pop()!;
-      if (list.length === 0) next.delete(curr);
-
-      const ndx = Math.floor(to / edges) - Math.floor(curr / edges);
-      const ndy = (to % edges) - (curr % edges);
-      if (ndx === dx && ndy === dy) {
-        run += ndx + ndy;
+      let dir = 0;
+      while (!((corners[curr] >> dir) & 1)) dir++;
+      corners[curr] &= ~(1 << dir);
+      if (dir === prev) {
+        run++;
       } else {
-        if (run) d += dx !== 0 ? `h${run * scale}` : `v${run * scale}`;
-        dx = ndx;
-        dy = ndy;
-        run = ndx + ndy;
+        if (prev !== -1) d += line(prev, run);
+        prev = dir;
+        run = 1;
       }
-      curr = to;
+      curr += dirOffsets[dir];
     } while (curr !== start);
-    d += dx !== 0 ? `h${run * scale}` : `v${run * scale}`;
-    d += "z";
+    d += line(prev, run) + "z";
   }
   return d;
 }
@@ -190,7 +172,7 @@ export interface Encoder {
   encode(version: number, push: (bits: number, len: number) => void): void;
 }
 
-// Length math for a QR encoding mode, independent of how content is stored
+// Header and length math for a QR encoding mode, independent of how content is stored
 export interface Mode {
   indicator: number;
   cciLen(version: number): number;

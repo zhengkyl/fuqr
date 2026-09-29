@@ -1,13 +1,14 @@
-// Takes [encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content]
-// Gives version-ecl-mask-hash or an error code.
+// Takes [encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content, svg]
+// Gives version-ecl-mask-hash, or the svg path if svg is [margin, scale], or an error code.
 use std::io::{self, BufRead, Write};
 
 use fuqr::extras::encoders::{AlphanumericEncoder, MixedEncoder, NumericEncoder};
 use fuqr::{
-    generate_with_encoder, ByteEncoder, Encoder, FuqrError, GenerateOptions, Module, QrCode,
+    build_svg_path_into, generate_with_encoder, ByteEncoder, Encoder, FuqrError, GenerateOptions,
+    Module, QrCode,
 };
 
-type Request = (String, u8, u8, u8, u8, u8, String);
+type Request = (String, u8, u8, u8, u8, u8, String, Option<(i32, i32)>);
 
 fn generate(encoder: &mut dyn Encoder, options: GenerateOptions) -> Result<QrCode, FuqrError> {
     generate_with_encoder(encoder, options)
@@ -23,7 +24,9 @@ fn hash(qr: &QrCode) -> u64 {
         })
 }
 
-fn answer((encoder, min_version, max_version, min_ecl, max_ecl, mask, content): Request) -> String {
+fn answer(
+    (encoder, min_version, max_version, min_ecl, max_ecl, mask, content, svg): Request,
+) -> String {
     let options = GenerateOptions {
         min_version,
         max_version,
@@ -41,9 +44,14 @@ fn answer((encoder, min_version, max_version, min_ecl, max_ecl, mask, content): 
         "mixed" => generate(&mut MixedEncoder::new(&content, &mut scratch), options),
         _ => panic!("bad encoder {encoder}"),
     };
-    match result {
-        Ok(qr) => format!("{}-{}-{}-{:016x}", qr.version, qr.ecl, qr.mask, hash(&qr)),
-        Err(err) => err.code().to_string(),
+    match (result, svg) {
+        (Ok(qr), Some((margin, scale))) => {
+            let mut path = String::new();
+            build_svg_path_into(&qr, margin, scale, &mut path).unwrap();
+            path
+        }
+        (Ok(qr), None) => format!("{}-{}-{}-{:016x}", qr.version, qr.ecl, qr.mask, hash(&qr)),
+        (Err(err), _) => err.code().to_string(),
     }
 }
 

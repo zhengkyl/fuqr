@@ -10,8 +10,24 @@ impl Mode for NumericMode {
         10 + (version > 9) as u8 * 2 + (version > 26) as u8 * 2
     }
     // 10 bits per 3 digits, 4 or 7 bits for 1 or 2 leftover digits
-    fn seg_len(&self, len: usize, version: Version) -> usize {
+    fn seg_len(&self, version: Version, len: usize) -> usize {
         4 + self.cci_len(version) as usize + (len * 10).div_ceil(3)
+    }
+    fn encode_utf8(&self, version: Version, bytes: &[u8], push: &mut dyn FnMut(u16, u8)) {
+        push(self.indicator(), 4);
+        push(bytes.len() as u16, self.cci_len(version));
+        let mut groups = bytes.chunks_exact(3);
+        for g in &mut groups {
+            push(
+                (g[0] - b'0') as u16 * 100 + (g[1] - b'0') as u16 * 10 + (g[2] - b'0') as u16,
+                10,
+            );
+        }
+        match *groups.remainder() {
+            [a] => push((a - b'0') as u16, 4),
+            [a, b] => push((a - b'0') as u16 * 10 + (b - b'0') as u16, 7),
+            _ => {}
+        }
     }
 }
 
@@ -25,8 +41,22 @@ impl Mode for AlphanumericMode {
         9 + (version > 9) as u8 * 2 + (version > 26) as u8 * 2
     }
     // 11 bits per 2 chars, 6 bits for 1 leftover char
-    fn seg_len(&self, len: usize, version: Version) -> usize {
+    fn seg_len(&self, version: Version, len: usize) -> usize {
         4 + self.cci_len(version) as usize + (len * 11).div_ceil(2)
+    }
+    fn encode_utf8(&self, version: Version, bytes: &[u8], push: &mut dyn FnMut(u16, u8)) {
+        push(self.indicator(), 4);
+        push(bytes.len() as u16, self.cci_len(version));
+        let mut pairs = bytes.chunks_exact(2);
+        for p in &mut pairs {
+            push(
+                B45_LUT[p[0] as usize] as u16 * 45 + B45_LUT[p[1] as usize] as u16,
+                11,
+            );
+        }
+        if let [a] = *pairs.remainder() {
+            push(B45_LUT[a as usize] as u16, 6);
+        }
     }
 }
 
@@ -47,30 +77,15 @@ impl<'a> NumericEncoder<'a> {
 }
 impl<'a> Encoder for NumericEncoder<'a> {
     fn bit_len(&mut self, version: Version) -> usize {
-        NumericMode.seg_len(self.bytes.len(), version)
+        NumericMode.seg_len(version, self.bytes.len())
     }
     fn encode(&mut self, version: Version, push: &mut dyn FnMut(u16, u8)) {
-        let bytes = self.bytes;
-
-        push(NumericMode.indicator(), 4);
-        push(bytes.len() as u16, NumericMode.cci_len(version));
-        let mut groups = bytes.chunks_exact(3);
-        for g in &mut groups {
-            push(
-                (g[0] - b'0') as u16 * 100 + (g[1] - b'0') as u16 * 10 + (g[2] - b'0') as u16,
-                10,
-            );
-        }
-        match *groups.remainder() {
-            [a] => push((a - b'0') as u16, 4),
-            [a, b] => push((a - b'0') as u16 * 10 + (b - b'0') as u16, 7),
-            _ => {}
-        }
+        NumericMode.encode_utf8(version, self.bytes, push);
     }
 }
 
-// Alphanumeric value of each byte, or 255 if not alphanumeric
-const B45: [u8; 256] = {
+/// Alphanumeric value of each byte, or 255 if not alphanumeric.
+pub const B45_LUT: [u8; 256] = {
     let chars = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:";
     let mut table = [255; 256];
     let mut i = 0;
@@ -88,48 +103,33 @@ pub struct AlphanumericEncoder<'a> {
 impl<'a> AlphanumericEncoder<'a> {
     pub fn new(content: &'a str) -> Result<Self, FuqrError> {
         let bytes = content.as_bytes();
-        if bytes.iter().any(|&b| B45[b as usize] == 255) {
+        if bytes.iter().any(|&b| B45_LUT[b as usize] == 255) {
             return Err(FuqrError::InvalidEncoding {
                 message: "Content is not alphanumeric",
             });
         }
         Ok(Self { bytes })
     }
-    pub fn byte_to_b45(c: u8) -> u8 {
-        B45[c as usize]
-    }
 }
 impl<'a> Encoder for AlphanumericEncoder<'a> {
     fn bit_len(&mut self, version: Version) -> usize {
-        AlphanumericMode.seg_len(self.bytes.len(), version)
+        AlphanumericMode.seg_len(version, self.bytes.len())
     }
     fn encode(&mut self, version: Version, push: &mut dyn FnMut(u16, u8)) {
-        let bytes = self.bytes;
-
-        push(AlphanumericMode.indicator(), 4);
-        push(bytes.len() as u16, AlphanumericMode.cci_len(version));
-        let mut pairs = bytes.chunks_exact(2);
-        for p in &mut pairs {
-            push(
-                B45[p[0] as usize] as u16 * 45 + B45[p[1] as usize] as u16,
-                11,
-            );
-        }
-        if let [a] = *pairs.remainder() {
-            push(B45[a as usize] as u16, 6);
-        }
+        AlphanumericMode.encode_utf8(version, self.bytes, push);
     }
 }
 
+const MODES: [&dyn Mode; 3] = [&NumericMode, &AlphanumericMode, &ByteMode];
+
 // Cheapest mode each byte fits in: 0 numeric, 1 alphanumeric, 2 byte
-// All multibyte UTF-8 bytes look like 1xxx_xxxx, so they are always 2
 const MODE: [u8; 256] = {
     let mut table = [2; 256];
     let mut i = 0;
     while i < 256 {
-        if B45[i] < 10 {
+        if B45_LUT[i] < 10 {
             table[i] = 0;
-        } else if B45[i] != 255 {
+        } else if B45_LUT[i] != 255 {
             table[i] = 1;
         }
         i += 1;
@@ -185,14 +185,10 @@ impl<'a> MixedEncoder<'a> {
         let n = bytes.len();
 
         if n == 0 {
-            return ByteMode.seg_len(0, version);
+            return ByteMode.seg_len(version, 0);
         }
 
-        let headers = [
-            4 + NumericMode.cci_len(version) as usize,
-            4 + AlphanumericMode.cci_len(version) as usize,
-            4 + ByteMode.cci_len(version) as usize,
-        ];
+        let headers = MODES.map(|m| 4 + m.cci_len(version) as usize);
         // Best path into each state as (bits, segment count, segment start)
         let mut paths = [(INF, 0, 0); 6];
         let mut closed = (0, 0);
@@ -271,8 +267,7 @@ impl<'a> Encoder for MixedEncoder<'a> {
         let n = bytes.len();
 
         if n == 0 {
-            push(ByteMode.indicator(), 4);
-            push(0, ByteMode.cci_len(version));
+            ByteMode.encode_utf8(version, &[], push);
             return;
         }
 
@@ -283,50 +278,7 @@ impl<'a> Encoder for MixedEncoder<'a> {
             while end < n && modes[end] == mode {
                 end += 1;
             }
-            let segment = &bytes[start..end];
-
-            match mode {
-                0 => {
-                    push(NumericMode.indicator(), 4);
-                    push(segment.len() as u16, NumericMode.cci_len(version));
-                    let mut groups = segment.chunks_exact(3);
-                    for g in &mut groups {
-                        push(
-                            (g[0] - b'0') as u16 * 100
-                                + (g[1] - b'0') as u16 * 10
-                                + (g[2] - b'0') as u16,
-                            10,
-                        );
-                    }
-                    match *groups.remainder() {
-                        [a] => push((a - b'0') as u16, 4),
-                        [a, b] => push((a - b'0') as u16 * 10 + (b - b'0') as u16, 7),
-                        _ => {}
-                    }
-                }
-                1 => {
-                    push(AlphanumericMode.indicator(), 4);
-                    push(segment.len() as u16, AlphanumericMode.cci_len(version));
-                    let mut pairs = segment.chunks_exact(2);
-                    for p in &mut pairs {
-                        push(
-                            B45[p[0] as usize] as u16 * 45 + B45[p[1] as usize] as u16,
-                            11,
-                        );
-                    }
-                    if let [a] = *pairs.remainder() {
-                        push(B45[a as usize] as u16, 6);
-                    }
-                }
-                _ => {
-                    push(ByteMode.indicator(), 4);
-                    push(segment.len() as u16, ByteMode.cci_len(version));
-                    for &b in segment {
-                        push(b as u16, 8);
-                    }
-                }
-            }
-
+            MODES[mode as usize].encode_utf8(version, &bytes[start..end], push);
             start = end;
         }
     }
