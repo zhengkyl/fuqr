@@ -14,6 +14,14 @@ let qr = generate("Hello, World!", GenerateOptions::default())?;
 // Any core::fmt::Write sink works: String, or a fixed buffer to stay heap-free.
 let mut svg = String::new();
 render_svg_into(&qr, SvgOptions::default(), &mut svg)?;
+
+// with options
+let options = SvgOptions {
+    margin: 2,
+    size: Some("1000px"), // <svg> width and height, "300" by default.
+    attributes: r#"class="qr" role="img" aria-label="fuqr repo""#, // appended to <svg>
+};
+render_svg_into(&qr, options, &mut svg)?;
 ```
 
 ### Reducing memory usage

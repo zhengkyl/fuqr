@@ -85,15 +85,16 @@ export function buildCanvasData(
 
 export function renderSvg(
   qr: { matrix: Uint8Array; version: Version },
-  options: { margin?: number; attributes?: string } = {},
+  options: { margin?: number; size?: number | string | null; attributes?: string } = {},
 ) {
-  const { margin = 2, attributes = 'xmlns="http://www.w3.org/2000/svg" width="300" height="300"' } =
-    options;
+  const { margin = 2, size = 300, attributes = "" } = options;
 
   const stride = qr.version * 4 + 17;
   const width = stride + 2 * margin;
   return (
-    `<svg ${attributes.length ? attributes + " " : ""}viewBox="0 0 ${width} ${width}">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${width}"` +
+    (size === null ? "" : ` width="${size}" height="${size}"`) +
+    ` shape-rendering="crispEdges"${attributes.length ? " " + attributes : ""}>` +
     `<rect width="${width}" height="${width}" fill="#fff"/>` +
     `<path fill="#000" d="${buildSvgPath(qr, margin, 1)}"/>` +
     `</svg>`

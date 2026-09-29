@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createInterface } from "node:readline";
 import QRCode from "qrcode";
+import { Resvg } from "@resvg/resvg-js";
 import { prepareZXingModule, readBarcodes } from "zxing-wasm/reader";
 import {
   BYTE,
@@ -160,91 +161,23 @@ async function scan(content: string, qr: Expected["qr"]) {
 
 // ---- SVG rendering ----
 
-// Obviously correct path with one clockwise square per dark module
-function squaresPath(
+// Whether svg renders exactly the dark modules, scaled up
+function svgMatches(
   { modules, width }: NonNullable<Expected["qr"]>,
   margin: number,
   scale: number,
+  svg: string,
 ) {
-  let d = "";
-  for (let y = 0; y < width; y++) {
-    for (let x = 0; x < width; x++) {
-      if (!modules[y * width + x]) continue;
-      d += `M${(x + margin) * scale},${(y + margin) * scale}h${scale}v${scale}h${-scale}z`;
-    }
+  const size = (width + 2 * margin) * scale;
+  const rgba = new Resvg(svg).render().pixels;
+  if (rgba.length !== size * size * 4) return false;
+  for (let i = 0; i < size * size; i++) {
+    const x = Math.floor((i % size) / scale) - margin;
+    const y = Math.floor(i / size / scale) - margin;
+    const dark = x >= 0 && y >= 0 && x < width && y < width && modules[y * width + x] === 1;
+    if (rgba[i * 4] < 128 !== dark) return false;
   }
-  return d;
-}
-
-// Fills an integer M, h, v, z path with the nonzero rule at pixel centers,
-// clipped to a size x size canvas. Throws on anything else.
-function rasterize(d: string, size: number) {
-  // Winding change at each column where a vertical edge crosses a row
-  const winding = new Int32Array(size * (size + 1));
-  const vertical = (x: number, y0: number, y1: number) => {
-    const col = Math.min(Math.max(x, 0), size);
-    for (let row = Math.max(Math.min(y0, y1), 0); row < Math.min(Math.max(y0, y1), size); row++) {
-      winding[row * (size + 1) + col] += Math.sign(y1 - y0);
-    }
-  };
-
-  let [x, y, startX, startY] = [0, 0, 0, 0];
-  // Fills close open subpaths too
-  const close = () => {
-    if (x !== startX && y !== startY) throw new Error(`diagonal close from ${x},${y}`);
-    vertical(x, y, startY);
-    [x, y] = [startX, startY];
-  };
-  const tokens = d.match(/[a-zA-Z]|[^a-zA-Z,\s]+/g) ?? [];
-  const number = (i: number) => {
-    const n = Number(tokens[i]);
-    if (!Number.isInteger(n)) throw new Error(`bad number ${tokens[i]}`);
-    return n;
-  };
-  for (let i = 0; i < tokens.length; ) {
-    const command = tokens[i++];
-    if (command === "M") {
-      close();
-      [x, y] = [number(i++), number(i++)];
-      [startX, startY] = [x, y];
-    } else if (command === "h") {
-      x += number(i++);
-    } else if (command === "v") {
-      vertical(x, y, (y += number(i++)));
-    } else if (command === "z") {
-      close();
-    } else {
-      throw new Error(`unsupported command ${command}`);
-    }
-  }
-  close();
-
-  const pixels = new Uint8Array(size * size);
-  for (let row = 0; row < size; row++) {
-    let sum = 0;
-    for (let col = 0; col < size; col++) {
-      sum += winding[row * (size + 1) + col];
-      pixels[row * size + col] = +(sum !== 0);
-    }
-  }
-  return pixels;
-}
-
-// Compares a port's path to squaresPath() pixel by pixel, returning what is wrong or ""
-function compareSvg(qr: NonNullable<Expected["qr"]>, margin: number, scale: number, d: string) {
-  const size = (qr.width + 2 * margin) * scale;
-  let got;
-  try {
-    got = rasterize(d, size);
-  } catch (err) {
-    return (err as Error).message;
-  }
-  const want = rasterize(squaresPath(qr, margin, scale), size);
-  const diff = [...got.keys()].filter((i) => got[i] !== want[i]);
-  if (diff.length === 0) return "";
-  const x = Math.floor((diff[0] % size) / scale) - margin;
-  const y = Math.floor(Math.floor(diff[0] / size) / scale) - margin;
-  return `${diff.length} pixels differ, first in module ${x},${y}`;
+  return true;
 }
 
 // ---- Adapter process ----
@@ -265,8 +198,8 @@ class Adapter {
     });
   }
 
-  // svg is [margin, scale] to get the port's svg path instead of a hash
-  ask(request: Case, svg: [number, number] | null = null) {
+  // svg is [margin, size, attributes] to get the port's svg instead of a hash
+  ask(request: Case, svg: [number, number | null, string] | null = null) {
     return new Promise<string>((resolve) => {
       this.waiting.push({ request, resolve });
       this.process.stdin.write(JSON.stringify([...request, svg]) + "\n");
@@ -335,15 +268,16 @@ function report(name: string, count: number, failures: string[]) {
   console.log(failures.slice(0, 5).join("\n"));
 }
 
-// [margin, scale]. Zero margin puts edges on the canvas border.
-const SVG_OPTIONS: [number, number][] = [
-  [0, 1],
-  [2, 1],
-  [1, 2],
-  [4, 3],
+// [margin, scale, attributes]. Zero margin puts edges on the canvas border, and
+// a null scale omits size, so the svg renders at one pixel per module.
+const SVG_OPTIONS: [number, number | null, string][] = [
+  [0, 1, ""],
+  [2, null, 'class="qr"'],
+  [1, 2, ""],
+  [4, 3, 'class="qr" role="img"'],
 ];
 
-// Checks svg paths of cases that fit. Assumes the port's matrix matches node-qrcode,
+// Checks svgs of cases that fit. Assumes the port's matrix matches node-qrcode,
 // which the other suites check.
 async function runSvg(adapter: Adapter, name: string, cases: Iterable<Case>) {
   const failures: string[] = [];
@@ -352,13 +286,13 @@ async function runSvg(adapter: Adapter, name: string, cases: Iterable<Case>) {
   for (const request of cases) {
     const { qr } = expected(request);
     if (qr === undefined) continue;
-    const [margin, scale] = SVG_OPTIONS[count++ % SVG_OPTIONS.length];
+    const [margin, scale, attributes] = SVG_OPTIONS[count++ % SVG_OPTIONS.length];
+    const size = scale === null ? null : (qr.width + 2 * margin) * scale;
     pending.push(
-      adapter.ask(request, [margin, scale]).then((d) => {
-        const error = compareSvg(qr, margin, scale, d);
-        if (error === "") return;
+      adapter.ask(request, [margin, size, attributes]).then((svg) => {
+        if (svgMatches(qr, margin, scale ?? 1, svg)) return;
         const shown = JSON.stringify([...request.slice(0, 6), request[6].slice(0, 80)]);
-        failures.push(`    ${shown}\n      margin ${margin}, scale ${scale}: ${error}`);
+        failures.push(`    ${shown}\n      margin ${margin}, scale ${scale}`);
       }),
     );
   }
