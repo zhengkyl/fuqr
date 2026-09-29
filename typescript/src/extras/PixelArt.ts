@@ -1,9 +1,17 @@
 import {
+  buildBlank,
+  buildMatrix,
+  ByteEncoder,
+  DEFAULT_OPTIONS,
   type Details,
+  determineDetails,
+  encodeMessage,
+  type Encoder,
   EXP_TABLE,
   FuqrError,
   type GenerateOptions,
   generatorPolynomial,
+  interleave,
   iterateMostlyDataModules,
   LOG_TABLE,
   MASKERS,
@@ -11,8 +19,9 @@ import {
   NUM_BLOCKS,
   NUM_DATA_BITS,
   NUM_EC_BYTES,
-  type Plugin,
+  type Message,
   polynomialRemainder,
+  type QrCode,
   visitAlignmentPatterns,
   visitTimingPatterns,
 } from "../fuqr.ts";
@@ -20,7 +29,7 @@ import {
 type Break = { index: number; mask: number; value: number };
 // Each weightedStencil value is (weight << 1) | bit, indexed by module position.
 // Weight 0 means don't care. Data module bits are pre-mask, function module bits are final.
-export class PixelArtPlugin implements Plugin {
+export class PixelArt {
   weightedStencil: Uint8Array;
   // Error correction bytes kept in reserve for real-world decode errors.
   // The rest of the budget is spent breaking forced bytes. Infinity disables breaks.
@@ -43,14 +52,32 @@ export class PixelArtPlugin implements Plugin {
     this.reservedEc = reservedEc;
   }
 
-  mutateDetails(details: Details, options: Required<GenerateOptions>): void {
+  generate(content: string | Encoder, options: GenerateOptions = {}): QrCode {
+    const encoder = typeof content === "string" ? new ByteEncoder(content) : content;
+    const details = determineDetails(encoder, options);
+    this.fitDetails(details, options.maxVersion ?? DEFAULT_OPTIONS.maxVersion);
+    return this.build(encoder, details);
+  }
+
+  // Skips fitDetails, for details that already match the stencil
+  build(encoder: Encoder, details: Details): QrCode {
+    const message = encodeMessage(encoder, details);
+    this.fixMessage(message, buildBlank(details).matrix);
+    const sequence = interleave(message);
+    this.breakSequence(sequence.bytes);
+    const qr = buildMatrix(sequence);
+    this.drawPatterns(qr);
+    return qr;
+  }
+
+  fitDetails(details: Details, maxVersion: number): void {
     let w = details.version * 4 + 17;
     if (w * w > this.weightedStencil.length) {
       throw new FuqrError("STENCIL_TOO_SMALL", "Required version exceeds stencil version");
     }
 
     while (w * w !== this.weightedStencil.length) {
-      if (details.version == options.maxVersion) {
+      if (details.version == maxVersion) {
         if (w * w > this.weightedStencil.length) {
           throw new FuqrError("STENCIL_WRONG_SIZE", "Stencil must be (4n + 17)^2 for 1<=n<=40");
         } else {
@@ -66,7 +93,7 @@ export class PixelArtPlugin implements Plugin {
   }
 
   // draw over timing and all alignment patterns except the only used (bottom right)
-  mutateMatrix(matrix: Uint8Array, { version }: Details) {
+  drawPatterns({ matrix, version }: QrCode) {
     const weightedStencil = this.weightedStencil;
     const width = version * 4 + 17;
     const override = (x: number, y: number) => {
@@ -84,12 +111,8 @@ export class PixelArtPlugin implements Plugin {
     });
   }
 
-  mutateMessage(
-    messageBytes: Uint8Array,
-    paddingStart: number,
-    matrix: Uint8Array,
-    details: Details,
-  ) {
+  // matrix has only function patterns, as from buildBlank
+  fixMessage({ details, bytes: messageBytes, paddingStart }: Message, matrix: Uint8Array) {
     const { version, ecl, mask } = details;
     const numBytes = NUM_DATA_BITS[version] >> 3;
     const numEcBytes = NUM_EC_BYTES[version][ecl];
@@ -312,7 +335,7 @@ export class PixelArtPlugin implements Plugin {
   }
 
   // overwrite intentional broken bytes
-  mutateSequence(interleaved: Uint8Array) {
+  breakSequence(interleaved: Uint8Array) {
     for (const { index, mask, value } of this.breaks) {
       interleaved[index] = (interleaved[index] & ~mask) | value;
     }

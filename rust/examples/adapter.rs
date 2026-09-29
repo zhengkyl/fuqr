@@ -10,7 +10,7 @@ use fuqr::{
 type Request = (String, u8, u8, u8, u8, u8, String);
 
 fn generate(encoder: &mut dyn Encoder, options: GenerateOptions) -> Result<QrCode, FuqrError> {
-    generate_with_encoder(encoder, options, &mut [])
+    generate_with_encoder(encoder, options)
 }
 
 // FNV-1a 64 of dark modules as 0 or 1

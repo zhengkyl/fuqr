@@ -1,8 +1,8 @@
 import { decode as decodePng } from "fast-png";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { PixelArtPlugin } from "../typescript/src/extras/PixelArtPlugin.ts";
-import { buildMatrix, ByteEncoder, Module } from "../typescript/src/fuqr.ts";
+import { PixelArt } from "../typescript/src/extras/PixelArt.ts";
+import { ByteEncoder, Module } from "../typescript/src/fuqr.ts";
 import { encodeGif } from "./helpers/gif.ts";
 import { toAlpha } from "./helpers/png.ts";
 
@@ -63,15 +63,15 @@ const margin = 2;
 const outWidth = (qrWidth + 2 * margin) * scale;
 
 // One fixer reused across frames so its schedule spreads ec churn over time.
-const fixer = new PixelArtPlugin(horseStencil(0));
+const fixer = new PixelArt(horseStencil(0));
 const frames: Uint8Array[] = [];
 for (let i = 0; i < numFrames; i++) {
   fixer.weightedStencil = horseStencil(i);
-  const { matrix } = buildMatrix(
-    new ByteEncoder("https://github.com/zhengkyl/fuqr"),
-    { version, ecl: 0, mask: 0 },
-    [fixer],
-  );
+  const { matrix } = fixer.build(new ByteEncoder("https://github.com/zhengkyl/fuqr"), {
+    version,
+    ecl: 0,
+    mask: 0,
+  });
 
   const frame = new Uint8Array(outWidth * outWidth); // 0 = white
   for (let my = 0; my < qrWidth; my++) {

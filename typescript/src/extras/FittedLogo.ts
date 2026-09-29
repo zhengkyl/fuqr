@@ -1,15 +1,24 @@
 import {
+  buildMatrix,
+  ByteEncoder,
+  DEFAULT_OPTIONS,
+  determineDetails,
+  encodeMessage,
   FuqrError,
+  interleave,
   Module,
   type Details,
   type Ecl,
+  type Encoder,
   type GenerateOptions,
-  type Plugin,
+  type QrCode,
   type Version,
 } from "../fuqr.ts";
 import { buildBlueprint } from "./blueprint.ts";
 
-export class FittedLogoPlugin implements Plugin {
+// Clears modules under a logo, growing the version until the cleared modules
+// stay inside the error correction budget
+export class FittedLogo {
   stencil: Stencil;
   size: number;
   naturalWidth: number;
@@ -27,7 +36,16 @@ export class FittedLogoPlugin implements Plugin {
     this.reserve = reserve;
   }
 
-  mutateDetails(details: Details, options: Required<GenerateOptions>) {
+  generate(content: string | Encoder, options: GenerateOptions = {}): QrCode {
+    const encoder = typeof content === "string" ? new ByteEncoder(content) : content;
+    const details = determineDetails(encoder, options);
+    this.fitDetails(details, options.maxVersion ?? DEFAULT_OPTIONS.maxVersion);
+    const qr = buildMatrix(interleave(encodeMessage(encoder, details)));
+    this.clearLogo(qr.matrix);
+    return qr;
+  }
+
+  fitDetails(details: Details, maxVersion: Version) {
     const fits = (version: Version, ecl: Ecl) => {
       const qrWidth = version * 4 + 17;
       const logoWidth = Math.round(this.size * qrWidth);
@@ -79,7 +97,7 @@ export class FittedLogoPlugin implements Plugin {
     };
 
     while (!fits(details.version, details.ecl)) {
-      if (details.version >= options.maxVersion) {
+      if (details.version >= maxVersion) {
         throw new FuqrError("LOGO_TOO_LARGE", "Logo covers too much of the QR to stay decodable");
       }
       details.version++;
@@ -87,7 +105,7 @@ export class FittedLogoPlugin implements Plugin {
     }
   }
 
-  mutateMatrix(matrix: Uint8Array) {
+  clearLogo(matrix: Uint8Array) {
     for (const pos of this.coveredPositions) {
       matrix[pos] &= ~Module.ON;
     }
