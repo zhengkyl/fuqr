@@ -23,23 +23,21 @@ export type GenerateOptions = {
   mask?: Mask;
 };
 
-export function generate(content: string, options: GenerateOptions = {}, plugins: Plugin[] = []) {
-  return generateWithEncoder(new ByteEncoder(content), options, plugins);
+export const DEFAULT_OPTIONS: Required<GenerateOptions> = {
+  minVersion: 1,
+  maxVersion: 40,
+  minEcl: 0,
+  maxEcl: 3,
+  mask: 2,
+};
+
+export function generate(content: string, options: GenerateOptions = {}) {
+  return generateWithEncoder(new ByteEncoder(content), options);
 }
 
-export function generateWithEncoder(
-  encoder: Encoder,
-  options: GenerateOptions = {},
-  plugins: Plugin[] = [],
-) {
-  const { minVersion = 1, maxVersion = 40, minEcl = 0, maxEcl = 3, mask = 2 } = options;
-
-  const details = determineDetails(
-    encoder,
-    { minVersion, maxVersion, minEcl, maxEcl, mask },
-    plugins,
-  );
-  return buildMatrix(encoder, details, plugins);
+export function generateWithEncoder(encoder: Encoder, options: GenerateOptions = {}) {
+  const details = determineDetails(encoder, options);
+  return buildMatrix(interleave(encodeMessage(encoder, details)));
 }
 
 export function renderCanvas(
@@ -200,17 +198,19 @@ export interface Mode {
   encodeUtf8(version: number, bytes: Uint8Array, push: (bits: number, len: number) => void): void;
 }
 
-export interface Plugin {
-  mutateDetails?(details: Details, options: Required<GenerateOptions>): void;
-  mutateMessage?(
-    messageBytes: Uint8Array,
-    paddingStart: number,
-    matrix: Uint8Array,
-    details: Details,
-  ): void;
-  mutateSequence?(interleaved: Uint8Array, matrix: Uint8Array, details: Details): void;
-  mutateMatrix?(matrix: Uint8Array, details: Details): void;
-}
+// Encoded content and padding, before error correction
+export type Message = {
+  details: Details;
+  bytes: Uint8Array;
+  // index of the first padding byte
+  paddingStart: number;
+};
+
+// Message and error correction bytes, interleaved in placement order
+export type Sequence = {
+  details: Details;
+  bytes: Uint8Array;
+};
 
 export class FuqrError extends Error {
   code: string;
@@ -260,12 +260,8 @@ export class ByteEncoder implements Encoder {
   }
 }
 
-export function determineDetails(
-  encoder: Encoder,
-  options: Required<GenerateOptions>,
-  plugins: Plugin[],
-) {
-  const { minVersion, maxVersion, minEcl, maxEcl, mask } = options;
+export function determineDetails(encoder: Encoder, options: GenerateOptions = {}): Details {
+  const { minVersion, maxVersion, minEcl, maxEcl, mask } = { ...DEFAULT_OPTIONS, ...options };
 
   for (let version = minVersion; version <= maxVersion; version++) {
     const reqBytes = Math.ceil(encoder.bitLen(version) / 8);
@@ -276,34 +272,19 @@ export function determineDetails(
       while (ecl < maxEcl && reqBytes <= dataBytes - NUM_EC_BYTES[version][ecl + 1]) {
         ecl++;
       }
-
-      const details = { version, ecl, mask };
-      plugins.forEach((p) => p.mutateDetails?.(details, options));
-      return details;
+      return { version, ecl, mask } as Details;
     }
   }
 
   throw new FuqrError("TEXT_TOO_LONG", `Cannot fit in version ${maxVersion}`);
 }
 
-export function buildMatrix(
-  encoder: Encoder,
-  details: {
-    version: Version;
-    ecl: Ecl;
-    mask: Mask;
-  },
-  plugins: Plugin[],
-) {
-  const { version, ecl, mask } = details;
+export function encodeMessage(encoder: Encoder, details: Details): Message {
+  const { version, ecl } = details;
+  const numBytes = NUM_DATA_BITS[version] >> 3;
+  const numMessageBytes = numBytes - NUM_EC_BYTES[version][ecl];
 
-  const numModules = NUM_DATA_BITS[version];
-  const numBytes = Math.floor(numModules / 8);
-  const remainderBits = numModules % 8;
-  const numEcBytes = NUM_EC_BYTES[version][ecl];
-  const numMessageBytes = numBytes - numEcBytes;
-
-  const messageBytes = new Uint8Array(numMessageBytes);
+  const bytes = new Uint8Array(numMessageBytes);
   let buf = 0,
     bufLen = 0,
     bytePos = 0;
@@ -312,7 +293,7 @@ export function buildMatrix(
     bufLen += n;
     while (bufLen >= 8) {
       bufLen -= 8;
-      messageBytes[bytePos++] = (buf >> bufLen) & 0xff;
+      bytes[bytePos++] = (buf >> bufLen) & 0xff;
     }
   };
 
@@ -329,16 +310,16 @@ export function buildMatrix(
     alternating ^= 0b1111_1101;
   }
 
-  const width = version * 4 + 17;
-  const matrix = new Uint8Array(width * width);
-  const set = (x: number, y: number, value: number) => (matrix[y * width + x] |= value);
-  visitFinderPatterns(width, set);
-  visitTimingPatterns(width, set);
-  visitFormatInfo(ecl, mask, width, set);
-  visitAlignmentPatterns(version, width, set);
-  visitVersionInfo(version, width, set);
+  return { details, bytes, paddingStart };
+}
 
-  plugins.forEach((p) => p.mutateMessage?.(messageBytes, paddingStart, matrix, details));
+// Splits the message into blocks, adds error correction, and interleaves them
+export function interleave({ details, bytes: messageBytes }: Message): Sequence {
+  const { version, ecl } = details;
+  const numModules = NUM_DATA_BITS[version];
+  const numBytes = Math.floor(numModules / 8);
+  const numMessageBytes = messageBytes.length;
+  const numEcBytes = numBytes - numMessageBytes;
 
   const blocks = NUM_BLOCKS[version][ecl];
   const g2Blocks = numBytes % blocks;
@@ -347,7 +328,7 @@ export function buildMatrix(
   const messagePerG2 = messagePerG1 + 1;
   const ecPerBlock = numEcBytes / blocks;
 
-  const interleaved = new Uint8Array(numBytes + (remainderBits > 0 ? 1 : 0));
+  const interleaved = new Uint8Array(numBytes + (numModules % 8 > 0 ? 1 : 0));
 
   const numG1 = g1Blocks * messagePerG1;
   for (let i = 0; i < numMessageBytes; i++) {
@@ -378,21 +359,39 @@ export function buildMatrix(
       interleaved[numMessageBytes + j * blocks + i + g1Blocks] = ec[j];
   }
 
-  plugins.forEach((p) => p.mutateSequence?.(interleaved, matrix, details));
+  return { details, bytes: interleaved };
+}
+
+// A matrix with only function patterns, so data modules are 0
+export function buildBlank(details: Details): QrCode {
+  const { version, ecl, mask } = details;
+  const width = version * 4 + 17;
+  const matrix = new Uint8Array(width * width);
+  const set = (x: number, y: number, value: number) => (matrix[y * width + x] |= value);
+  visitFinderPatterns(width, set);
+  visitTimingPatterns(width, set);
+  visitFormatInfo(ecl, mask, width, set);
+  visitAlignmentPatterns(version, width, set);
+  visitVersionInfo(version, width, set);
+  return { matrix, ...details };
+}
+
+// Places the sequence into a blank matrix, applying the mask
+export function buildMatrix({ details, bytes }: Sequence): QrCode {
+  const qr = buildBlank(details);
+  const { matrix, version, mask } = qr;
+  const width = version * 4 + 17;
+  const masker = MASKERS[mask];
 
   let bitIdx = 0;
-  const masker = MASKERS[mask];
   iterateMostlyDataModules(width, (x, y) => {
     if (matrix[y * width + x] === 0) {
-      const bit = (interleaved[bitIdx >> 3] >> (7 - (bitIdx % 8))) & Module.ON;
-      set(x, y, Module.DATA | (bit ^ +masker(x, y)));
+      const bit = (bytes[bitIdx >> 3] >> (7 - (bitIdx % 8))) & Module.ON;
+      matrix[y * width + x] |= Module.DATA | (bit ^ +masker(x, y));
       bitIdx++;
     }
   });
-
-  plugins.forEach((p) => p.mutateMatrix?.(matrix, details));
-
-  return { matrix, ...details };
+  return qr;
 }
 
 export function iterateMostlyDataModules(width: number, callback: (x: number, y: number) => void) {

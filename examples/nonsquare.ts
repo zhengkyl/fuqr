@@ -1,10 +1,10 @@
-// A star logo dropped into the center of a QR. FittedLogoPlugin grows the
+// A star logo dropped into the center of a QR. FittedLogo grows the
 // version until the modules it clears stay inside the error correction budget.
 import { decode as decodePng } from "fast-png";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { FittedLogoPlugin } from "../typescript/src/extras/FittedLogoPlugin.ts";
-import { generate, Module } from "../typescript/src/fuqr.ts";
+import { FittedLogo } from "../typescript/src/extras/FittedLogo.ts";
+import { Module } from "../typescript/src/fuqr.ts";
 import { encodePng, toRgba } from "./helpers/png.ts";
 
 const star = toRgba(decodePng(readFileSync(join(import.meta.dirname, "inputs/star.png"))));
@@ -13,18 +13,16 @@ for (let i = 0; i < alpha.length; i++) alpha[i] = star.rgba[i * 4 + 3];
 
 const size = 0.57; // logo width as a fraction of the qr width
 
-const { matrix, version } = generate("https://github.com/zhengkyl/fuqr", { maxVersion: 6 }, [
-  new FittedLogoPlugin(
-    {
-      dataUrl: "",
-      naturalWidth: star.width,
-      naturalHeight: star.height,
-      stencil: { width: star.width, height: star.height, data: alpha },
-    },
-    size,
-    0,
-  ),
-]);
+const { matrix, version } = new FittedLogo(
+  {
+    dataUrl: "",
+    naturalWidth: star.width,
+    naturalHeight: star.height,
+    stencil: { width: star.width, height: star.height, data: alpha },
+  },
+  size,
+  0,
+).generate("https://github.com/zhengkyl/fuqr", { maxVersion: 6 });
 
 const stride = version * 4 + 17;
 const margin = 2;
@@ -51,7 +49,7 @@ for (let my = 0; my < stride; my++) {
   }
 }
 
-// same placement the plugin reserves, then draw the star into it
+// same placement the logo reserves, then draw the star into it
 const logoWidth = Math.round(size * stride);
 const logoHeight = Math.round((logoWidth * star.height) / star.width);
 const lpx = (Math.round((stride - logoWidth) / 2) + margin) * scale;

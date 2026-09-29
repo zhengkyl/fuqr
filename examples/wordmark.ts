@@ -3,8 +3,8 @@
 import { decode as decodePng } from "fast-png";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { FittedLogoPlugin } from "../typescript/src/extras/FittedLogoPlugin.ts";
-import { generate, Module } from "../typescript/src/fuqr.ts";
+import { FittedLogo } from "../typescript/src/extras/FittedLogo.ts";
+import { Module } from "../typescript/src/fuqr.ts";
 import { encodePng, toRgba } from "./helpers/png.ts";
 
 const wordmark = toRgba(decodePng(readFileSync(join(import.meta.dirname, "inputs/wordmark.png"))));
@@ -26,26 +26,17 @@ for (let sy = 0; sy < naturalHeight; sy++) {
 }
 
 const size = barH / stride;
-const { matrix } = generate(
-  "https://kylezhe.ng/writes/crafting-qr-codes",
+const { matrix } = new FittedLogo(
   {
-    minVersion: 6,
-    maxVersion: 6,
+    dataUrl: "",
+    naturalWidth,
+    naturalHeight,
+    stencil: { width: naturalWidth, height: naturalHeight, data: alpha },
   },
-  [
-    new FittedLogoPlugin(
-      {
-        dataUrl: "",
-        naturalWidth,
-        naturalHeight,
-        stencil: { width: naturalWidth, height: naturalHeight, data: alpha },
-      },
-      size,
-      1,
-      1,
-    ),
-  ],
-);
+  size,
+  1,
+  1,
+).generate("https://kylezhe.ng/writes/crafting-qr-codes", { minVersion: 6, maxVersion: 6 });
 
 const margin = 2;
 const scale = 7;

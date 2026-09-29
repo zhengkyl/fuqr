@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { PixelArtPlugin } from "../typescript/src/extras/PixelArtPlugin.ts";
+import { PixelArt } from "../typescript/src/extras/PixelArt.ts";
 import { generate, Module, renderSvg } from "../typescript/src/fuqr.ts";
 
 const margin = 2;
@@ -23,7 +23,7 @@ function recursive() {
     }
   }
 
-  return renderSvg(generate("OUTSIDE", {}, [new PixelArtPlugin(stencil)]));
+  return renderSvg(new PixelArt(stencil).generate("OUTSIDE"));
 }
 
 writeFileSync(join(import.meta.dirname, "outputs/recursive.svg"), recursive());

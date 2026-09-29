@@ -55,22 +55,21 @@ impl Default for GenerateOptions {
 pub fn generate<const N: usize>(
     content: &str,
     options: GenerateOptions,
-    plugins: &mut [&mut dyn Plugin],
 ) -> Result<QrCode<N>, FuqrError> {
-    generate_with_encoder(&mut ByteEncoder::new(content), options, plugins)
+    generate_with_encoder(&mut ByteEncoder::new(content), options)
 }
 
 pub fn generate_with_encoder<const N: usize>(
     encoder: &mut dyn Encoder,
     mut options: GenerateOptions,
-    plugins: &mut [&mut dyn Plugin],
 ) -> Result<QrCode<N>, FuqrError> {
     const { assert!(N >= modules_for(1), "matrix buffer smaller than version 1") };
 
     options.max_version = options.max_version.min(max_version_for(N));
 
-    let details = determine_details(encoder, options, plugins)?;
-    build_matrix(encoder, details, plugins)
+    let details = determine_details(encoder, options)?;
+    let message = encode_message(encoder, details);
+    Ok(build_matrix(&interleave(&message)))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -235,7 +234,7 @@ pub trait Mode {
 }
 
 /// Generation parameters, seeded from [`GenerateOptions`] and settled during
-/// [`determine_details`] (plugins get the last word via `mutate_details`).
+/// [`determine_details`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Details {
     pub version: Version,
@@ -243,57 +242,16 @@ pub struct Details {
     pub mask: Mask,
 }
 
-#[allow(unused_variables)]
-pub trait Plugin {
-    fn mutate_details(
-        &mut self,
-        details: &mut Details,
-        options: &GenerateOptions,
-    ) -> Result<(), FuqrError> {
-        Ok(())
-    }
-    fn mutate_message(
-        &mut self,
-        message_bytes: &mut [u8],
-        padding_start: usize,
-        matrix: &[u8],
-        details: &Details,
-    ) -> Result<(), FuqrError> {
-        Ok(())
-    }
-    fn mutate_sequence(
-        &mut self,
-        interleaved: &mut [u8],
-        matrix: &[u8],
-        details: &Details,
-    ) -> Result<(), FuqrError> {
-        Ok(())
-    }
-    fn mutate_matrix(&mut self, matrix: &mut [u8], details: &Details) -> Result<(), FuqrError> {
-        Ok(())
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FuqrError {
-    TextTooLong {
-        max_version: Version,
-    },
-    InvalidEncoding {
-        message: &'static str,
-    },
-    /// For custom plugins. Strings are static; keep dynamic detail as plugin state.
-    Plugin {
-        code: &'static str,
-        message: &'static str,
-    },
+    TextTooLong { max_version: Version },
+    InvalidEncoding { message: &'static str },
 }
 impl FuqrError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::TextTooLong { .. } => "TEXT_TOO_LONG",
             Self::InvalidEncoding { .. } => "INVALID_ENCODING",
-            Self::Plugin { code, .. } => code,
         }
     }
 }
@@ -304,7 +262,6 @@ impl fmt::Display for FuqrError {
                 write!(f, "Cannot fit in version {max_version}")
             }
             Self::InvalidEncoding { message } => f.write_str(message),
-            Self::Plugin { message, .. } => f.write_str(message),
         }
     }
 }
@@ -368,7 +325,6 @@ impl<'a> Encoder for ByteEncoder<'a> {
 pub fn determine_details(
     encoder: &mut dyn Encoder,
     options: GenerateOptions,
-    plugins: &mut [&mut dyn Plugin],
 ) -> Result<Details, FuqrError> {
     for version in options.min_version..=options.max_version {
         let v = version as usize;
@@ -382,16 +338,11 @@ pub fn determine_details(
             {
                 ecl += 1;
             }
-
-            let mut details = Details {
+            return Ok(Details {
                 version,
                 ecl,
                 mask: options.mask,
-            };
-            for p in plugins.iter_mut() {
-                p.mutate_details(&mut details, &options)?;
-            }
-            return Ok(details);
+            });
         }
     }
 
@@ -419,69 +370,76 @@ impl BitSink<'_> {
     }
 }
 
-pub fn build_matrix<const N: usize>(
-    encoder: &mut dyn Encoder,
-    details: Details,
-    plugins: &mut [&mut dyn Plugin],
-) -> Result<QrCode<N>, FuqrError> {
-    let Details { version, ecl, mask } = details;
+/// Encoded content and padding, before error correction.
+#[derive(Debug, Clone)]
+pub struct Message {
+    pub details: Details,
+    /// Only the first `len` bytes are used.
+    pub bytes: [u8; MAX_MESSAGE_BYTES],
+    pub len: usize,
+    /// Index of the first padding byte.
+    pub padding_start: usize,
+}
 
+/// Message and error correction bytes, interleaved in placement order.
+#[derive(Debug, Clone)]
+pub struct Sequence {
+    pub details: Details,
+    /// Only the first `len` bytes are used.
+    pub bytes: [u8; MAX_DATA_BYTES],
+    pub len: usize,
+}
+
+pub fn encode_message(encoder: &mut dyn Encoder, details: Details) -> Message {
+    let v = details.version as usize;
+    let num_bytes = NUM_DATA_BITS[v] as usize / 8;
+    let len = num_bytes - NUM_EC_BYTES[v][details.ecl as usize] as usize;
+
+    let mut bytes = [0u8; MAX_MESSAGE_BYTES];
+    let mut sink = BitSink {
+        out: &mut bytes[..len],
+        buf: 0,
+        buf_len: 0,
+        pos: 0,
+    };
+    encoder.encode(details.version, &mut |bits, n| sink.push(bits, n));
+
+    let remaining_data_bits = len * 8 - sink.pos * 8 - sink.buf_len as usize;
+    sink.push(
+        0,
+        if remaining_data_bits < 4 {
+            remaining_data_bits as u8
+        } else {
+            4
+        },
+    );
+    sink.push(0, ((8 - sink.buf_len) & 7) as u8);
+
+    let padding_start = sink.pos;
+    let mut alternating: u8 = 0b1110_1100;
+    for _ in sink.pos..len {
+        sink.push(alternating as u16, 8);
+        alternating ^= 0b1111_1101;
+    }
+
+    Message {
+        details,
+        bytes,
+        len,
+        padding_start,
+    }
+}
+
+/// Splits the message into blocks, adds error correction, and interleaves them.
+pub fn interleave(message: &Message) -> Sequence {
+    let Details { version, ecl, .. } = message.details;
     let v = version as usize;
+    let message_bytes = &message.bytes[..message.len];
+    let num_message_bytes = message.len;
+
     let num_bits = NUM_DATA_BITS[v] as usize;
     let num_bytes = num_bits / 8;
-    let remainder_bits = num_bits % 8;
-    let num_ec_bytes = NUM_EC_BYTES[v][ecl as usize] as usize;
-    let num_message_bytes = num_bytes - num_ec_bytes;
-
-    let mut message_bytes = [0u8; MAX_MESSAGE_BYTES];
-    let padding_start;
-    {
-        let mut sink = BitSink {
-            out: &mut message_bytes[..num_message_bytes],
-            buf: 0,
-            buf_len: 0,
-            pos: 0,
-        };
-        encoder.encode(version, &mut |bits, len| sink.push(bits, len));
-
-        let remaining_data_bits = num_message_bytes * 8 - sink.pos * 8 - sink.buf_len as usize;
-        sink.push(
-            0,
-            if remaining_data_bits < 4 {
-                remaining_data_bits as u8
-            } else {
-                4
-            },
-        );
-        sink.push(0, ((8 - sink.buf_len) & 7) as u8);
-
-        padding_start = sink.pos;
-        let mut alternating: u8 = 0b1110_1100;
-        for _ in sink.pos..num_message_bytes {
-            sink.push(alternating as u16, 8);
-            alternating ^= 0b1111_1101;
-        }
-    }
-
-    let width = v * 4 + 17;
-    let mut matrix = [0u8; N];
-    {
-        let mut set = |x: usize, y: usize, value: u8| matrix[y * width + x] |= value;
-        visit_finder_patterns(width, &mut set);
-        visit_timing_patterns(width, &mut set);
-        visit_format_info(ecl, mask, width, &mut set);
-        visit_alignment_patterns(version, width, &mut set);
-        visit_version_info(version, width, &mut set);
-    }
-
-    for p in plugins.iter_mut() {
-        p.mutate_message(
-            &mut message_bytes[..num_message_bytes],
-            padding_start,
-            &matrix[..width * width],
-            &details,
-        )?;
-    }
+    let num_ec_bytes = num_bytes - num_message_bytes;
 
     let blocks = NUM_BLOCKS[v][ecl as usize] as usize;
     let g2_blocks = num_bytes % blocks;
@@ -490,7 +448,7 @@ pub fn build_matrix<const N: usize>(
     let message_per_g2 = message_per_g1 + 1;
     let ec_per_block = num_ec_bytes / blocks;
 
-    let interleaved_len = num_bytes + (remainder_bits > 0) as usize;
+    let len = num_bytes + (num_bits % 8 > 0) as usize;
     let mut interleaved = [0u8; MAX_DATA_BYTES];
 
     let num_g1 = g1_blocks * message_per_g1;
@@ -529,34 +487,49 @@ pub fn build_matrix<const N: usize>(
         }
     }
 
-    for p in plugins.iter_mut() {
-        p.mutate_sequence(
-            &mut interleaved[..interleaved_len],
-            &matrix[..width * width],
-            &details,
-        )?;
+    Sequence {
+        details: message.details,
+        bytes: interleaved,
+        len,
     }
+}
 
-    let mut bit_idx = 0usize;
-    let masker = MASKERS[mask as usize];
-    iterate_mostly_data_modules(width, |x, y| {
-        if matrix[y * width + x] == 0 {
-            let bit = (interleaved[bit_idx >> 3] >> (7 - (bit_idx & 7))) & Module::ON;
-            matrix[y * width + x] |= Module::DATA | (bit ^ masker(x, y) as u8);
-            bit_idx += 1;
-        }
-    });
+/// A matrix with only function patterns, so data modules are 0.
+pub fn build_blank<const N: usize>(details: Details) -> QrCode<N> {
+    let Details { version, ecl, mask } = details;
+    let width = version as usize * 4 + 17;
+    let mut matrix = [0u8; N];
+    let mut set = |x: usize, y: usize, value: u8| matrix[y * width + x] |= value;
+    visit_finder_patterns(width, &mut set);
+    visit_timing_patterns(width, &mut set);
+    visit_format_info(ecl, mask, width, &mut set);
+    visit_alignment_patterns(version, width, &mut set);
+    visit_version_info(version, width, &mut set);
 
-    for p in plugins.iter_mut() {
-        p.mutate_matrix(&mut matrix[..width * width], &details)?;
-    }
-
-    Ok(QrCode {
+    QrCode {
         matrix,
         version,
         ecl,
         mask,
-    })
+    }
+}
+
+/// Places the sequence into a blank matrix, applying the mask.
+pub fn build_matrix<const N: usize>(sequence: &Sequence) -> QrCode<N> {
+    let mut qr = build_blank(sequence.details);
+    let width = qr.version as usize * 4 + 17;
+    let masker = MASKERS[qr.mask as usize];
+    let matrix = &mut qr.matrix;
+
+    let mut bit_idx = 0usize;
+    iterate_mostly_data_modules(width, |x, y| {
+        if matrix[y * width + x] == 0 {
+            let bit = (sequence.bytes[bit_idx >> 3] >> (7 - (bit_idx & 7))) & Module::ON;
+            matrix[y * width + x] |= Module::DATA | (bit ^ masker(x, y) as u8);
+            bit_idx += 1;
+        }
+    });
+    qr
 }
 
 pub fn iterate_mostly_data_modules(width: usize, mut callback: impl FnMut(usize, usize)) {
