@@ -1,12 +1,12 @@
 {
   "name": "fuqr",
-  "version": "2.3.0",
-  "description": "A small and hackable QR code generator",
+  "version": "2.3.1",
+  "description": "Deprecated: renamed to furious-qr",
   "license": "MIT",
   "author": "Kyle Zheng <kylezheng73@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zhengkyl/fuqr.git",
+    "url": "git+https://github.com/zhengkyl/furious-qr.git",
     "directory": "typescript"
   },
   "files": [

@@ -1,5 +1,9 @@
 # fuqr
 
+> **Deprecated: `fuqr` has been renamed to [`furious-qr`](https://www.npmjs.com/package/furious-qr).**
+> This package will not receive further updates. `furious-qr` 3.0.0 includes breaking changes;
+> see the [repository](https://github.com/zhengkyl/furious-qr) for details.
+
 A small and hackable QR code generator
 
 ## Install
