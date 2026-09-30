@@ -1,6 +1,6 @@
 {
   "name": "furious-qr",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "description": "A small and hackable QR code generator",
   "license": "MIT",
   "author": "Kyle Zheng <kylezheng73@gmail.com>",

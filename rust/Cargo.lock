@@ -4,7 +4,7 @@ version = 3
 
 [[package]]
 name = "furious-qr"
-version = "2.1.0"
+version = "3.0.0"
 dependencies = [
  "furious-qr",
  "serde_json",
