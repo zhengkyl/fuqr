@@ -195,11 +195,11 @@ export type Sequence = {
   bytes: Uint8Array;
 };
 
-export class FuqrError extends Error {
+export class FuriousQrError extends Error {
   code: string;
   constructor(code: string, message: string) {
     super(message);
-    this.name = "FuqrError";
+    this.name = "FuriousQrError";
     this.code = code;
   }
 }
@@ -259,7 +259,7 @@ export function determineDetails(encoder: Encoder, options: GenerateOptions = {}
     }
   }
 
-  throw new FuqrError("CONTENT_TOO_LONG", `Cannot fit in version ${maxVersion}`);
+  throw new FuriousQrError("CONTENT_TOO_LONG", `Cannot fit in version ${maxVersion}`);
 }
 
 export function encodeMessage(encoder: Encoder, details: Details): Message {

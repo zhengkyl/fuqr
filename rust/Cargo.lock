@@ -3,10 +3,10 @@
 version = 3
 
 [[package]]
-name = "fuqr"
+name = "furious-qr"
 version = "2.1.0"
 dependencies = [
- "fuqr",
+ "furious-qr",
  "serde_json",
 ]
 

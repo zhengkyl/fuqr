@@ -2,7 +2,7 @@ import { decode as decodePng } from "fast-png";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PixelArt } from "../typescript/src/extras/PixelArt.ts";
-import { ByteEncoder, Module } from "../typescript/src/fuqr.ts";
+import { ByteEncoder, Module } from "../typescript/src/furious-qr.ts";
 import { encodeGif } from "./helpers/gif.ts";
 import { toAlpha } from "./helpers/png.ts";
 
@@ -67,7 +67,7 @@ const fixer = new PixelArt(horseStencil(0));
 const frames: Uint8Array[] = [];
 for (let i = 0; i < numFrames; i++) {
   fixer.weightedStencil = horseStencil(i);
-  const { matrix } = fixer.build(new ByteEncoder("https://github.com/zhengkyl/fuqr"), {
+  const { matrix } = fixer.build(new ByteEncoder("https://github.com/zhengkyl/furious-qr"), {
     version,
     ecl: 0,
     mask: 0,

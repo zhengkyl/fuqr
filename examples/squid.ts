@@ -2,9 +2,9 @@
 // fourth corner, and data modules traced into merged svg contours.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildSvgPath, generate, Module } from "../typescript/src/fuqr.ts";
+import { buildSvgPath, generate, Module } from "../typescript/src/furious-qr.ts";
 
-const qr = generate("https://github.com/zhengkyl/fuqr");
+const qr = generate("https://github.com/zhengkyl/furious-qr");
 const margin = 2;
 const fg = "#000";
 const bg = "#fff";

@@ -55,14 +55,14 @@ impl Default for GenerateOptions {
 pub fn generate<const N: usize>(
     content: &str,
     options: GenerateOptions,
-) -> Result<QrCode<N>, FuqrError> {
+) -> Result<QrCode<N>, FuriousQrError> {
     generate_with_encoder(&mut ByteEncoder::new(content), options)
 }
 
 pub fn generate_with_encoder<const N: usize>(
     encoder: &mut dyn Encoder,
     mut options: GenerateOptions,
-) -> Result<QrCode<N>, FuqrError> {
+) -> Result<QrCode<N>, FuriousQrError> {
     const { assert!(N >= modules_for(1), "matrix buffer smaller than version 1") };
 
     options.max_version = options.max_version.min(max_version_for(N));
@@ -251,11 +251,11 @@ pub struct Details {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FuqrError {
+pub enum FuriousQrError {
     ContentTooLong { max_version: Version },
     EncodingFailure { message: &'static str },
 }
-impl FuqrError {
+impl FuriousQrError {
     pub fn code(&self) -> &'static str {
         match self {
             Self::ContentTooLong { .. } => "CONTENT_TOO_LONG",
@@ -263,7 +263,7 @@ impl FuqrError {
         }
     }
 }
-impl fmt::Display for FuqrError {
+impl fmt::Display for FuriousQrError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ContentTooLong { max_version } => {
@@ -273,7 +273,7 @@ impl fmt::Display for FuqrError {
         }
     }
 }
-impl core::error::Error for FuqrError {}
+impl core::error::Error for FuriousQrError {}
 
 // ---- INTERNAL API BELOW, USERS YE BE WARNED ----
 //
@@ -336,7 +336,7 @@ impl<'a> Encoder for ByteEncoder<'a> {
 pub fn determine_details(
     encoder: &mut dyn Encoder,
     options: GenerateOptions,
-) -> Result<Details, FuqrError> {
+) -> Result<Details, FuriousQrError> {
     for version in options.min_version..=options.max_version {
         let v = version as usize;
         let req_bytes = encoder.bit_len(version).div_ceil(8);
@@ -357,7 +357,7 @@ pub fn determine_details(
         }
     }
 
-    Err(FuqrError::ContentTooLong {
+    Err(FuriousQrError::ContentTooLong {
         max_version: options.max_version,
     })
 }

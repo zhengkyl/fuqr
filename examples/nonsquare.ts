@@ -4,7 +4,7 @@ import { decode as decodePng } from "fast-png";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FittedLogo } from "../typescript/src/extras/FittedLogo.ts";
-import { Module } from "../typescript/src/fuqr.ts";
+import { Module } from "../typescript/src/furious-qr.ts";
 import { encodePng, toRgba } from "./helpers/png.ts";
 
 const star = toRgba(decodePng(readFileSync(join(import.meta.dirname, "inputs/star.png"))));
@@ -22,7 +22,7 @@ const { matrix, version } = new FittedLogo(
   },
   size,
   0,
-).generate("https://github.com/zhengkyl/fuqr", { maxVersion: 6 });
+).generate("https://github.com/zhengkyl/furious-qr", { maxVersion: 6 });
 
 const stride = version * 4 + 17;
 const margin = 2;

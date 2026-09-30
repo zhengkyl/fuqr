@@ -4,7 +4,7 @@ import { decode as decodePng } from "fast-png";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FittedLogo } from "../typescript/src/extras/FittedLogo.ts";
-import { Module } from "../typescript/src/fuqr.ts";
+import { Module } from "../typescript/src/furious-qr.ts";
 import { encodePng, toRgba } from "./helpers/png.ts";
 
 const wordmark = toRgba(decodePng(readFileSync(join(import.meta.dirname, "inputs/wordmark.png"))));

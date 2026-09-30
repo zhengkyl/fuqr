@@ -1,21 +1,21 @@
-# fuqr
+# furious-qr
 
 A small and hackable QR code generator
 
 ## Install
 
 ```sh
-pnpm add fuqr
+pnpm add furious-qr
 ```
 
-Or simply copy `src/fuqr.ts`.
+Or simply copy `src/furious-qr.ts`.
 
 ## Usage
 
 ```js
-import { generate, renderCanvas, renderSvg } from "fuqr";
+import { generate, renderCanvas, renderSvg } from "furious-qr";
 
-const qr = generate("https://github.com/zhengkyl/fuqr");
+const qr = generate("https://github.com/zhengkyl/furious-qr");
 
 // as svg string
 const svg = renderSvg(qr);
@@ -24,7 +24,7 @@ const svg = renderSvg(qr);
 const svg = renderSvg(qr, {
   margin: 2,
   size: "1000px", // <svg> width and height, "300" by default.
-  attributes: 'class="qr" role="img" aria-label="fuqr repo"', // appended to <svg>
+  attributes: 'class="qr" role="img" aria-label="furious-qr repo"', // appended to <svg>
 });
 
 // OR
@@ -50,7 +50,7 @@ canvas.toBlob((blob) => {
 
 ### Advanced
 
-For control over encoding mode, anything that implements `Encoder` can be used with `generateWithEncoder()`. For convenience, `NumericEncoder`, `AlphanumericEncoder`, and `MixedEncoder` (shortest mix of modes) are included in `fuqr/extras/encoders`. `ByteMode`, `NumericMode`, and `AlphanumericMode` provide each mode's header and bit lengths for custom encoders.
+For control over encoding mode, anything that implements `Encoder` can be used with `generateWithEncoder()`. For convenience, `NumericEncoder`, `AlphanumericEncoder`, and `MixedEncoder` (shortest mix of modes) are included in `furious-qr/extras/encoders`. `ByteMode`, `NumericMode`, and `AlphanumericMode` provide each mode's header and bit lengths for custom encoders.
 
 `generateWithEncoder()` is a pipeline of four steps, which can be called directly to change results along the way: `determineDetails()`, `encodeMessage()`, `interleave()`, and `buildMatrix()`. `buildBlank()` gives a matrix with only function patterns. `PixelArt` and `FittedLogo` in the extras folder are built this way, but behavior is not yet stabilized.
 
@@ -58,6 +58,6 @@ Although everything is exported, only the `generate` and `render` prefixed funct
 
 - `buildSvgPath()` and `buildCanvasData()` provide composable rendering logic.
 
-- `buildBlueprint()` from `fuqr/extras/blueprint` can be used to find the block and bit index of every pixel.
+- `buildBlueprint()` from `furious-qr/extras/blueprint` can be used to find the block and bit index of every pixel.
 
 - The `visit` helpers run a callback function with the coords of every pixel in a structural section. Looping through the data section, however, requires `iterateMostlyDataModules()` and manually skipping structural pixels.

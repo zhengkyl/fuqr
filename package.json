@@ -2,7 +2,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:ts": "pnpm -F fuqr build",
     "examples": "ls examples/*.ts | xargs -I {} node {}",
     "test": "pnpm test:ts && pnpm test:rust",
     "test:ts": "node helpers/test.ts node typescript/tests/adapter.ts",

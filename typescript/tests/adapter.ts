@@ -4,12 +4,12 @@ import { createInterface } from "node:readline";
 import { AlphanumericEncoder, MixedEncoder, NumericEncoder } from "../src/extras/encoders.ts";
 import {
   ByteEncoder,
-  FuqrError,
+  FuriousQrError,
   type GenerateOptions,
   generateWithEncoder,
   Module,
   renderSvg,
-} from "../src/fuqr.ts";
+} from "../src/furious-qr.ts";
 
 const ENCODERS = {
   numeric: NumericEncoder,
@@ -50,7 +50,7 @@ function answer([encoder, minVersion, maxVersion, minEcl, maxEcl, mask, content,
     if (svg === null) return answer;
     return `${answer} ${renderSvg(qr, { margin: svg[0], size: svg[1], attributes: svg[2] })}`;
   } catch (err) {
-    if (err instanceof FuqrError) return err.code;
+    if (err instanceof FuriousQrError) return err.code;
     throw err;
   }
 }

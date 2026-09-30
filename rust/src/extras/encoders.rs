@@ -1,4 +1,4 @@
-use crate::{ByteMode, Encoder, FuqrError, Mode, Version};
+use crate::{ByteMode, Encoder, FuriousQrError, Mode, Version};
 
 #[derive(Debug, Clone, Copy)]
 pub struct NumericMode;
@@ -65,10 +65,10 @@ pub struct NumericEncoder<'a> {
     pub bytes: &'a [u8],
 }
 impl<'a> NumericEncoder<'a> {
-    pub fn new(content: &'a str) -> Result<Self, FuqrError> {
+    pub fn new(content: &'a str) -> Result<Self, FuriousQrError> {
         let bytes = content.as_bytes();
         if !bytes.iter().all(u8::is_ascii_digit) {
-            return Err(FuqrError::EncodingFailure {
+            return Err(FuriousQrError::EncodingFailure {
                 message: "Content is not numeric",
             });
         }
@@ -101,10 +101,10 @@ pub struct AlphanumericEncoder<'a> {
     pub bytes: &'a [u8],
 }
 impl<'a> AlphanumericEncoder<'a> {
-    pub fn new(content: &'a str) -> Result<Self, FuqrError> {
+    pub fn new(content: &'a str) -> Result<Self, FuriousQrError> {
         let bytes = content.as_bytes();
         if bytes.iter().any(|&b| B45_LUT[b as usize] == 255) {
-            return Err(FuqrError::EncodingFailure {
+            return Err(FuriousQrError::EncodingFailure {
                 message: "Content is not alphanumeric",
             });
         }

@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildSvgPath, generate, Module } from "../typescript/src/fuqr.ts";
+import { buildSvgPath, generate, Module } from "../typescript/src/furious-qr.ts";
 
 const margin = 2;
 

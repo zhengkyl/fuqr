@@ -1,4 +1,4 @@
-# fuqr
+# furious-qr
 
 A small and hackable QR code generator
 

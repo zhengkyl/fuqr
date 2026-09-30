@@ -1,12 +1,12 @@
 [package]
-name = "fuqr"
+name = "furious-qr"
 version = "2.1.0"
 edition = "2021"
 rust-version = "1.81"
 license = "MIT"
 authors = ["Kyle Zheng <kylezheng73@gmail.com>"]
 description = "A small and hackable QR code generator"
-repository = "https://github.com/zhengkyl/fuqr/tree/main/rust"
+repository = "https://github.com/zhengkyl/furious-qr/tree/main/rust"
 
 [profile.release]
 opt-level = "s"
@@ -16,5 +16,5 @@ lto = true
 extras = []
 
 [dev-dependencies]
-fuqr = { path = ".", features = ["extras"] }
+furious-qr = { path = ".", features = ["extras"] }
 serde_json = "1.0.151"

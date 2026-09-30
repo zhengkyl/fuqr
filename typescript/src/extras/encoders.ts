@@ -1,4 +1,4 @@
-import { ByteMode, FuqrError, type Encoder, type Mode } from "../fuqr.ts";
+import { ByteMode, FuriousQrError, type Encoder, type Mode } from "../furious-qr.ts";
 
 export const NumericMode: Mode = {
   indicator: 0b0001,
@@ -49,7 +49,7 @@ export class NumericEncoder implements Encoder {
     for (let i = 0; i < content.length; i++) {
       const byte = content.charCodeAt(i);
       if (byte < 0x30 || 0x39 < byte) {
-        throw new FuqrError("ENCODING_FAILURE", `Content is not numeric`);
+        throw new FuriousQrError("ENCODING_FAILURE", `Content is not numeric`);
       }
       bytes[i] = byte;
     }
@@ -76,7 +76,7 @@ export class AlphanumericEncoder implements Encoder {
     for (let i = 0; i < content.length; i++) {
       const byte = content.charCodeAt(i);
       if (byte > 255 || B45_LUT[byte] === 255) {
-        throw new FuqrError("ENCODING_FAILURE", `Content is not alphanumeric`);
+        throw new FuriousQrError("ENCODING_FAILURE", `Content is not alphanumeric`);
       }
       bytes[i] = byte;
     }

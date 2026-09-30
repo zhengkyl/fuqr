@@ -1,8 +1,8 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { generate, Module } from "../typescript/src/fuqr.ts";
+import { generate, Module } from "../typescript/src/furious-qr.ts";
 
-const { matrix, version } = generate("https://github.com/zhengkyl/fuqr");
+const { matrix, version } = generate("https://github.com/zhengkyl/furious-qr");
 const stride = version * 4 + 17;
 const margin = 2;
 const scale = 11;

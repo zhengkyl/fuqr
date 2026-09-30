@@ -1,4 +1,4 @@
-# fuqr
+# furious-qr
 
 A small and hackable QR code generator
 
@@ -7,7 +7,7 @@ Dependency-free, heap-free `no_std` port of the Typescript library.
 ## Usage
 
 ```rust
-use fuqr::{generate, render_svg_into, GenerateOptions, QrCode, SvgOptions};
+use furious_qr::{generate, render_svg_into, GenerateOptions, QrCode, SvgOptions};
 
 let qr = generate("Hello, World!", GenerateOptions::default())?;
 
@@ -19,7 +19,7 @@ render_svg_into(&qr, SvgOptions::default(), &mut svg)?;
 let options = SvgOptions {
     margin: 2,
     size: Some("1000px"), // <svg> width and height, "300" by default.
-    attributes: r#"class="qr" role="img" aria-label="fuqr repo""#, // appended to <svg>
+    attributes: r#"class="qr" role="img" aria-label="furious-qr repo""#, // appended to <svg>
 };
 render_svg_into(&qr, options, &mut svg)?;
 ```
@@ -44,17 +44,17 @@ let qr = generate::<{ modules_for(13) }>(content, options)?;
 
 ### Advanced
 
-For control over encoding mode, anything that implements `Encoder` can be used with `generate_with_encoder()`. `NumericEncoder`, `AlphanumericEncoder`, and `MixedEncoder` (shortest mix of modes) are included in `fuqr::extras::encoders`. `ByteMode`, `NumericMode`, and `AlphanumericMode` provide each mode's header and bit lengths for custom encoders.
+For control over encoding mode, anything that implements `Encoder` can be used with `generate_with_encoder()`. `NumericEncoder`, `AlphanumericEncoder`, and `MixedEncoder` (shortest mix of modes) are included in `furious_qr::extras::encoders`. `ByteMode`, `NumericMode`, and `AlphanumericMode` provide each mode's header and bit lengths for custom encoders.
 
-`fuqr::extras` requires the `extras` feature.
+`furious_qr::extras` requires the `extras` feature.
 
 ```toml
 [dependencies]
-fuqr = { version = "2", features = ["extras"] }
+furious-qr = { version = "2", features = ["extras"] }
 ```
 
 ```rust
-use fuqr::extras::encoders::MixedEncoder;
+use furious_qr::extras::encoders::MixedEncoder;
 
 // MixedEncoder needs one scratch byte per content byte to stay heap-free
 let mut scratch = [0u8; 64];

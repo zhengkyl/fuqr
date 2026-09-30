@@ -86,7 +86,7 @@ await run("boundaries", { scan: true, svg: true }, function* () {
   const texts: Record<Encoder, string> = {
     numeric: "3141592653589793238462643383279502884197169399375105820974944",
     alphanumeric: "THE QUICK BROWN FOX JUMPS OVER 13 LAZY DOGS $%*+-./: 24680 ZYX",
-    byte: "Hello, wörld! 日本語のテキスト 🎉 https://example.com/?q=fuqr&n=42\n",
+    byte: "Hello, wörld! 日本語のテキスト 🎉 https://example.com/?q=code&n=42\n",
     mixed: "https://example.com/2470295/MANUALS/525322511#step-3?Q=ABC%20DEF&é=日本0000A00a",
   };
   for (const encoder of ENCODERS) {

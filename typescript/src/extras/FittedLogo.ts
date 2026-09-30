@@ -4,7 +4,7 @@ import {
   DEFAULT_OPTIONS,
   determineDetails,
   encodeMessage,
-  FuqrError,
+  FuriousQrError,
   interleave,
   Module,
   type Details,
@@ -13,7 +13,7 @@ import {
   type GenerateOptions,
   type QrCode,
   type Version,
-} from "../fuqr.ts";
+} from "../furious-qr.ts";
 import { buildBlueprint } from "./blueprint.ts";
 
 // Clears modules under a logo, growing the version until the cleared modules
@@ -98,7 +98,10 @@ export class FittedLogo {
 
     while (!fits(details.version, details.ecl)) {
       if (details.version >= maxVersion) {
-        throw new FuqrError("LOGO_TOO_LARGE", "Logo covers too much of the QR to stay decodable");
+        throw new FuriousQrError(
+          "LOGO_TOO_LARGE",
+          "Logo covers too much of the QR to stay decodable",
+        );
       }
       details.version++;
       details.ecl = 3;

@@ -8,7 +8,7 @@ import {
   encodeMessage,
   type Encoder,
   EXP_TABLE,
-  FuqrError,
+  FuriousQrError,
   type GenerateOptions,
   generatorPolynomial,
   interleave,
@@ -24,7 +24,7 @@ import {
   type QrCode,
   visitAlignmentPatterns,
   visitTimingPatterns,
-} from "../fuqr.ts";
+} from "../furious-qr.ts";
 
 type Break = { index: number; mask: number; value: number };
 // Each weightedStencil value is (weight << 1) | bit, indexed by module position.
@@ -73,15 +73,18 @@ export class PixelArt {
   fitDetails(details: Details, maxVersion: number): void {
     let w = details.version * 4 + 17;
     if (w * w > this.weightedStencil.length) {
-      throw new FuqrError("STENCIL_TOO_SMALL", "Required version exceeds stencil version");
+      throw new FuriousQrError("STENCIL_TOO_SMALL", "Required version exceeds stencil version");
     }
 
     while (w * w !== this.weightedStencil.length) {
       if (details.version == maxVersion) {
         if (w * w > this.weightedStencil.length) {
-          throw new FuqrError("STENCIL_WRONG_SIZE", "Stencil must be (4n + 17)^2 for 1<=n<=40");
+          throw new FuriousQrError(
+            "STENCIL_WRONG_SIZE",
+            "Stencil must be (4n + 17)^2 for 1<=n<=40",
+          );
         } else {
-          throw new FuqrError("STENCIL_TOO_BIG", "Stencil version exceeds max version");
+          throw new FuriousQrError("STENCIL_TOO_BIG", "Stencil version exceeds max version");
         }
       }
 

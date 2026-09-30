@@ -1,10 +1,10 @@
 import { decode as decodePng } from "fast-png";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { generate, Module } from "../typescript/src/fuqr.ts";
+import { generate, Module } from "../typescript/src/furious-qr.ts";
 import { encodePng, toGray } from "./helpers/png.ts";
 
-const { matrix, version } = generate("https://github.com/zhengkyl/fuqr", {
+const { matrix, version } = generate("https://github.com/zhengkyl/furious-qr", {
   minVersion: 3,
   maxVersion: 3,
 });

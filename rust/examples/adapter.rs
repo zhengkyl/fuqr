@@ -2,9 +2,9 @@
 // Gives version-ecl-mask-hash, then a space and the svg if svg is [margin, size, attributes], or an error code.
 use std::io::{self, BufRead, Write};
 
-use fuqr::extras::encoders::{AlphanumericEncoder, MixedEncoder, NumericEncoder};
-use fuqr::{
-    generate_with_encoder, render_svg_into, ByteEncoder, Encoder, FuqrError, GenerateOptions,
+use furious_qr::extras::encoders::{AlphanumericEncoder, MixedEncoder, NumericEncoder};
+use furious_qr::{
+    generate_with_encoder, render_svg_into, ByteEncoder, Encoder, FuriousQrError, GenerateOptions,
     Module, QrCode, SvgOptions,
 };
 
@@ -19,7 +19,7 @@ type Request = (
     Option<(i32, Option<String>, String)>,
 );
 
-fn generate(encoder: &mut dyn Encoder, options: GenerateOptions) -> Result<QrCode, FuqrError> {
+fn generate(encoder: &mut dyn Encoder, options: GenerateOptions) -> Result<QrCode, FuriousQrError> {
     generate_with_encoder(encoder, options)
 }
 

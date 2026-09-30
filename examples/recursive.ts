@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PixelArt } from "../typescript/src/extras/PixelArt.ts";
-import { generate, Module, renderSvg } from "../typescript/src/fuqr.ts";
+import { generate, Module, renderSvg } from "../typescript/src/furious-qr.ts";
 
 const margin = 2;
 const pad = 8;
