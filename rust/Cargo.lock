@@ -4,4 +4,4 @@ version = 3
 
 [[package]]
 name = "fuqr"
-version = "2.1.0"
+version = "2.1.1"

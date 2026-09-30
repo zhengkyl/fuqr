@@ -1,5 +1,9 @@
 # fuqr
 
+> **Deprecated: `fuqr` has been renamed to [`furious-qr`](https://crates.io/crates/furious-qr).**
+> This crate will not receive further updates. `furious-qr` 3.0.0 includes breaking changes;
+> see the [repository](https://github.com/zhengkyl/furious-qr) for details.
+
 A small and hackable QR code generator
 
 Dependency-free, heap-free `no_std` port of the Typescript library.
